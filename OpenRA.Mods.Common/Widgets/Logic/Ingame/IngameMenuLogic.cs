@@ -551,15 +551,24 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 						if (map.Visibility == MapVisibility.Lobby)
 						{
 							// HACK: Server lobby should be usable without a server.
-							ConnectionLogic.Connect(Game.CreateLocalServer(uid),
-								"",
-								() => Game.OpenWindow("SERVER_LOBBY", new WidgetArgs
+							void OpenEditorLobby()
+							{
+								Game.OpenWindow("SERVER_LOBBY", new WidgetArgs
 								{
 									{ "onExit", CloseMenu },
 									{ "onStart", () => { } },
 									{ "skirmishMode", true }
-								}),
-								() => Game.CloseServer());
+								});
+							}
+
+							if (OperatingSystem.IsBrowser())
+							{
+								var conn = Game.CreateBrowserLoopbackLocalServer(uid);
+								Game.JoinServer(conn, "");
+								Game.RunWhenLoopbackConnected(conn, OpenEditorLobby, () => Game.CloseServer());
+							}
+							else
+								ConnectionLogic.Connect(Game.CreateLocalServer(uid), "", OpenEditorLobby, () => Game.CloseServer());
 						}
 						else if (map.Visibility == MapVisibility.MissionSelector)
 						{

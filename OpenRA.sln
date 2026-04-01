@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.28803.352
@@ -8,6 +8,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenRA.Mods.Cnc", "OpenRA.Mods.Cnc\OpenRA.Mods.Cnc.csproj", "{2881135D-4D62-493E-8F83-5EEE92CCC6BE}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenRA.Utility", "OpenRA.Utility\OpenRA.Utility.csproj", "{F33337BE-CB69-4B24-850F-07D23E408DDF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenRA.FontBake", "OpenRA.FontBake\OpenRA.FontBake.csproj", "{8F7E6D5C-4B3A-2918-7654-3210FEDCBA98}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenRA.Server", "OpenRA.Server\OpenRA.Server.csproj", "{76F621A1-3D8E-4A99-9F7E-B071EB657817}"
 EndProject
@@ -41,6 +43,10 @@ Global
 		{F33337BE-CB69-4B24-850F-07D23E408DDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F33337BE-CB69-4B24-850F-07D23E408DDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F33337BE-CB69-4B24-850F-07D23E408DDF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F7E6D5C-4B3A-2918-7654-3210FEDCBA98}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F7E6D5C-4B3A-2918-7654-3210FEDCBA98}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F7E6D5C-4B3A-2918-7654-3210FEDCBA98}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F7E6D5C-4B3A-2918-7654-3210FEDCBA98}.Release|Any CPU.Build.0 = Release|Any CPU
 		{76F621A1-3D8E-4A99-9F7E-B071EB657817}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{76F621A1-3D8E-4A99-9F7E-B071EB657817}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{76F621A1-3D8E-4A99-9F7E-B071EB657817}.Release|Any CPU.ActiveCfg = Release|Any CPU

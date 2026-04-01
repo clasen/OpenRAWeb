@@ -3,20 +3,32 @@
  * Copyright (c) The OpenRA Developers and Contributors
  * This file is part of OpenRA, which is free software. It is made
  * available to you under the terms of the GNU General Public License
- * as published by the Free Software Foundation, either version 3 of
- * the License, or (at your option) any later version. For more
- * information, see COPYING.
+ * either version 3 of the License, or (at your option) any later version.
+ * For more information, see COPYING.
  */
 #endregion
 
 using System;
+using OpenRA.FileSystem;
+#if !OPENRA_BROWSER
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using OpenRA.FileSystem;
+#endif
 
 namespace OpenRA
 {
+#if OPENRA_BROWSER
+	/// <summary>WebAssembly has no filesystem watcher API; maps load once from packages.</summary>
+	public sealed class MapDirectoryTracker : IDisposable
+	{
+		public MapDirectoryTracker(MapGrid mapGrid, IReadOnlyPackage package, MapClassification classification) { }
+
+		public void Dispose() { }
+
+		public void UpdateMaps(MapCache mapcache) { }
+	}
+#else
 	public sealed class MapDirectoryTracker : IDisposable
 	{
 		readonly FileSystemWatcher watcher;
@@ -126,4 +138,5 @@ namespace OpenRA
 			return package.Name + Path.DirectorySeparatorChar + endPath.Split(Path.DirectorySeparatorChar)[0];
 		}
 	}
+#endif
 }

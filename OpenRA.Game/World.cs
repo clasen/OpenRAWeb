@@ -305,6 +305,10 @@ namespace OpenRA
 
 			if (OrderManager.Connection is NetworkConnection nc && nc.Recorder != null)
 				nc.Recorder.Metadata = new ReplayMetadata(gameInfo);
+#if OPENRA_BROWSER
+			else if (OrderManager.Connection is BrowserTunnelConnection btc && btc.Recorder != null)
+				btc.Recorder.Metadata = new ReplayMetadata(gameInfo);
+#endif
 		}
 
 		public void PostLoadComplete(WorldRenderer wr)

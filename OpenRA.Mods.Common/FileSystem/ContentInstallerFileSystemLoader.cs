@@ -9,6 +9,7 @@
  */
 #endregion
 
+using System;
 using System.Collections.Generic;
 
 namespace OpenRA.Mods.Common.FileSystem
@@ -45,9 +46,14 @@ namespace OpenRA.Mods.Common.FileSystem
 					{
 						fileSystem.Mount(kv.Key, kv.Value);
 					}
-					catch
+					catch (Exception ex)
 					{
 						isContentAvailable = false;
+#if OPENRA_BROWSER
+						Console.WriteLine($"[browser] Failed to mount content package '{kv.Key}' ({kv.Value ?? "<implicit>"}): {ex.Message}");
+#else
+						OpenRA.Log.Write("debug", $"Failed to mount content package '{kv.Key}' ({kv.Value ?? "<implicit>"}): {ex.Message}");
+#endif
 					}
 				}
 			}
@@ -55,15 +61,35 @@ namespace OpenRA.Mods.Common.FileSystem
 			if (RequiredContentFiles != null)
 				foreach (var kv in RequiredContentFiles)
 					if (!fileSystem.Exists(kv.Key))
+					{
 						isContentAvailable = false;
+#if OPENRA_BROWSER
+						Console.WriteLine($"[browser] Missing required content file '{kv.Key}'.");
+#else
+						OpenRA.Log.Write("debug", $"Missing required content file '{kv.Key}'.");
+#endif
+					}
 		}
 
 		bool IFileSystemExternalContent.InstallContentIfRequired(ModData modData)
 		{
+#if OPENRA_BROWSER
+			// Browser host currently has no complete content-install flow (registry/disc/source resolvers are desktop-oriented).
+			// Avoid recursive switch to the hidden *-content mod which can stall startup in Wasm.
+			// Fail fast instead of continuing into asset initialization with missing packages.
+			if (!isContentAvailable)
+			{
+				Console.WriteLine("[browser] Missing external content detected; content-installer mod is unavailable in browser.");
+				Console.WriteLine("[browser] Aborting mod load before asset initialization to avoid startup stall.");
+			}
+
+			return !isContentAvailable;
+#else
 			if (!isContentAvailable)
 				Game.InitializeMod(ContentInstallerMod, new Arguments());
 
 			return !isContentAvailable;
+#endif
 		}
 	}
 }

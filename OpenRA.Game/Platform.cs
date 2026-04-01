@@ -21,7 +21,7 @@ namespace OpenRA
 
 	public enum SupportDirType { System, ModernUser, LegacyUser, User }
 
-	public static class Platform
+	public static partial class Platform
 	{
 		public static PlatformType CurrentPlatform => LazyCurrentPlatform.Value;
 		public static Architecture CurrentArchitecture => RuntimeInformation.ProcessArchitecture;
@@ -40,6 +40,9 @@ namespace OpenRA
 
 		static PlatformType GetCurrentPlatform()
 		{
+#if OPENRA_BROWSER
+			return PlatformType.Unknown;
+#else
 			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
 				return PlatformType.Windows;
 
@@ -61,6 +64,7 @@ namespace OpenRA
 			catch { }
 
 			return PlatformType.Unknown;
+#endif
 		}
 
 		public static string RuntimeVersion
@@ -233,8 +237,20 @@ namespace OpenRA
 			if (supportDirInitialized)
 				throw new InvalidOperationException("Attempted to override user support directory after it has already been accessed.");
 
+#if OPENRA_BROWSER
+			try
+			{
+				if (!Directory.Exists(path))
+					Directory.CreateDirectory(path);
+			}
+			catch
+			{
+				// Browser FS may not allow creating arbitrary paths; still use path for logical roots.
+			}
+#else
 			if (!Directory.Exists(path))
 				throw new DirectoryNotFoundException(path);
+#endif
 
 			if (!path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) &&
 					!path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
@@ -267,12 +283,36 @@ namespace OpenRA
 			if (engineDirAccessed)
 				throw new InvalidOperationException("Attempted to override engine directory after it has already been accessed.");
 
+#if OPENRA_BROWSER
+			// Wasm BinDir is often "/"; combining yields "/engine" which is not a real filesystem path.
+			// Keep a URL-relative prefix (e.g. "engine/") and load files via HTTP (see Game.BrowserHttpAssetBase).
+			if (!Path.IsPathRooted(path))
+			{
+				path = path.Replace('\\', '/').TrimEnd('/') + "/";
+				engineDirAccessed = true;
+				engineDir = path;
+				return;
+			}
+#endif
+
 			// Note: Relative paths are interpreted as being relative to BinDir, not the current working dir.
 			if (!Path.IsPathRooted(path))
 				path = Path.Combine(BinDir, path);
 
+#if OPENRA_BROWSER
+			if (!Directory.Exists(path))
+			{
+				if (!path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) &&
+						!path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+					path += Path.DirectorySeparatorChar;
+				engineDirAccessed = true;
+				engineDir = path;
+				return;
+			}
+#else
 			if (!Directory.Exists(path))
 				throw new DirectoryNotFoundException(path);
+#endif
 
 			if (!path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) &&
 				!path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))

@@ -48,14 +48,19 @@ namespace OpenRA
 		static readonly CancellationTokenSource CancellationToken = new();
 
 		static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(5);
-		static readonly Timer Timer;
-		static readonly Thread Thread;
+		static readonly Timer? Timer;
+		static readonly Thread? Thread;
 
 		static Log()
 		{
 			Channel = System.Threading.Channels.Channel.CreateUnbounded<ChannelData>();
 			ChannelWriter = Channel.Writer;
 
+#if OPENRA_BROWSER
+			// Browser Wasm: no dedicated Thread API; flush log lines synchronously in Write().
+			Thread = null;
+			Timer = null;
+#else
 			Thread = new Thread(DoWork)
 			{
 				Name = "OpenRA Logging Thread"
@@ -64,6 +69,7 @@ namespace OpenRA
 			Thread.Start(CancellationToken.Token);
 
 			Timer = new Timer(FlushToDisk, CancellationToken.Token, FlushInterval, Timeout.InfiniteTimeSpan);
+#endif
 		}
 
 		static void FlushToDisk(object state)
@@ -169,19 +175,29 @@ namespace OpenRA
 
 		public static void Write(string channelName, string value)
 		{
-			ChannelWriter.TryWrite(new ChannelData(channelName, value));
+			var data = new ChannelData(channelName, value);
+#if OPENRA_BROWSER
+			WriteValue(data);
+#else
+			ChannelWriter.TryWrite(data);
+#endif
 		}
 
 		public static void Write(string channelName, Exception e)
 		{
-			ChannelWriter.TryWrite(new ChannelData(channelName, $"{e.Message}{Environment.NewLine}{e.StackTrace}"));
+			var data = new ChannelData(channelName, $"{e.Message}{Environment.NewLine}{e.StackTrace}");
+#if OPENRA_BROWSER
+			WriteValue(data);
+#else
+			ChannelWriter.TryWrite(data);
+#endif
 		}
 
 		public static void Dispose()
 		{
 			CancellationToken.Cancel();
-			Timer.Dispose();
-			Thread.Join();
+			Timer?.Dispose();
+			Thread?.Join();
 		}
 	}
 }

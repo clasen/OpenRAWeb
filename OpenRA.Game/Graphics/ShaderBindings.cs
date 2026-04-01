@@ -63,6 +63,16 @@ namespace OpenRA.Graphics
 
 		public static string GetShaderCode(string filename)
 		{
+#if OPENRA_BROWSER
+			// Wasm: avoid sync-over-async HTTP (throws). Shaders are embedded when built with OpenRaBrowserBuild.
+			var stream = typeof(ShaderBindings).Assembly.GetManifestResourceStream($"OpenRA.BrowserGlsl.{filename}");
+			if (stream != null)
+			{
+				using (stream)
+				using (var reader = new StreamReader(stream))
+					return reader.ReadToEnd();
+			}
+#endif
 			var filepath = Path.Combine(Platform.EngineDir, "glsl", filename);
 			return File.ReadAllText(filepath);
 		}

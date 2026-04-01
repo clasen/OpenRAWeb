@@ -1,4 +1,4 @@
-﻿#region Copyright & License Information
+#region Copyright & License Information
 /*
  * Copyright (c) The OpenRA Developers and Contributors
  * This file is part of OpenRA, which is free software. It is made
@@ -61,6 +61,11 @@ namespace OpenRA.Mods.Common
 
 			if (!Game.Settings.Game.EnableDiscordService)
 				return;
+
+#if OPENRA_BROWSER
+			// DiscordRPC uses Process / named pipes which are unavailable on WebAssembly.
+			return;
+#endif
 
 			// HACK: Prevent service from starting when launching the utility or server.
 			if (Game.Renderer == null)

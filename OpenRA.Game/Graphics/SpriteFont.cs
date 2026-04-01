@@ -235,14 +235,41 @@ namespace OpenRA.Graphics
 			var lines = text.SplitLines('\n');
 
 			var maxWidth = 0f;
-			var rows = 0;
+			var totalHeight = 0;
 			foreach (var line in lines)
 			{
-				rows++;
 				maxWidth = Math.Max(maxWidth, LineWidth(line));
+				totalHeight += LineMeasureHeight(line);
 			}
 
-			return new int2((int)Math.Ceiling(maxWidth), rows * size);
+			return new int2((int)Math.Ceiling(maxWidth), totalHeight);
+		}
+
+		/// <summary>
+		/// Vertical size for one line of text for layout (UI units). Uses actual glyph pixel extents
+		/// relative to the baseline (same space as <see cref="DrawText"/> offsets), so centering
+		/// matches rasterized output across platforms (e.g. browser vs FreeType). Never below nominal
+		/// <see cref="size"/> so line spacing and multi-line layout stay stable.
+		/// </summary>
+		int LineMeasureHeight(ReadOnlySpan<char> line)
+		{
+			var minO = int.MaxValue;
+			var maxO = int.MinValue;
+			foreach (var c in line)
+			{
+				var g = glyphs[c];
+				if (g.Sprite == null)
+					continue;
+				minO = Math.Min(minO, g.Offset.Y);
+				maxO = Math.Max(maxO, g.Offset.Y + g.Sprite.Bounds.Height);
+			}
+
+			if (minO == int.MaxValue)
+				return size;
+
+			var inkPx = maxO - minO;
+			var inkUi = inkPx / deviceScale;
+			return (int)Math.Ceiling(Math.Max(size, inkUi));
 		}
 
 		float LineWidth(ReadOnlySpan<char> line)
@@ -262,7 +289,7 @@ namespace OpenRA.Graphics
 				return new GlyphInfo
 				{
 					Sprite = null,
-					Advance = 0,
+					Advance = glyph.Advance,
 					Offset = int2.Zero
 				};
 			}

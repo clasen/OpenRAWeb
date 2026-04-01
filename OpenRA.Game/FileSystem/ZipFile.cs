@@ -65,6 +65,17 @@ namespace OpenRA.FileSystem
 				return pkg.GetEntry(filename) != null;
 			}
 
+			/// <summary>Open a top-level mod folder (e.g. "ra") even if the archive has no explicit directory entry.</summary>
+			public IReadOnlyPackage OpenSubfolder(string folderName)
+			{
+				var prefix = folderName + "/";
+				foreach (var name in Contents)
+					if (name.StartsWith(prefix, StringComparison.Ordinal))
+						return new ZipFolder(this, folderName);
+
+				return null;
+			}
+
 			public void Dispose()
 			{
 				pkg?.Close();
@@ -76,7 +87,18 @@ namespace OpenRA.FileSystem
 				// Directories are stored with a trailing "/" in the index
 				var entry = pkg.GetEntry(filename) ?? pkg.GetEntry(filename + "/");
 				if (entry == null)
+				{
+					// No explicit directory entry (common for archives built without folder markers).
+					var normalized = filename.Replace('\\', '/').TrimEnd('/');
+					var prefix = normalized + "/";
+					foreach (ZipEntry ze in pkg)
+					{
+						if (ze.IsFile && ze.Name.StartsWith(prefix, StringComparison.Ordinal))
+							return new ZipFolder(this, normalized);
+					}
+
 					return null;
+				}
 
 				if (entry.IsDirectory)
 					return new ZipFolder(this, filename);
@@ -166,16 +188,28 @@ namespace OpenRA.FileSystem
 			{
 				get
 				{
+					// Mirror Folder: top-level files and subdirectories under this logical path.
+					var prefix = Name + "/";
+					var seen = new HashSet<string>(StringComparer.Ordinal);
 					foreach (var entry in Parent.Contents)
 					{
-						if (entry.StartsWith(Name, StringComparison.Ordinal) && entry != Name)
-						{
-							var filename = entry[(Name.Length + 1)..];
-							var dirLevels = filename.Split('/').Count(c => !string.IsNullOrEmpty(c));
-							if (dirLevels == 1)
-								yield return filename;
-						}
+						if (!entry.StartsWith(prefix, StringComparison.Ordinal))
+							continue;
+
+						var remainder = entry[prefix.Length..];
+						if (string.IsNullOrEmpty(remainder))
+							continue;
+
+						var slash = remainder.IndexOf('/');
+						var first = slash >= 0 ? remainder[..slash] : remainder;
+						if (string.IsNullOrEmpty(first))
+							continue;
+
+						seen.Add(first);
 					}
+
+					foreach (var n in seen.OrderBy(x => x, StringComparer.Ordinal))
+						yield return n;
 				}
 			}
 
@@ -186,7 +220,15 @@ namespace OpenRA.FileSystem
 
 			public IReadOnlyPackage OpenPackage(string filename, FileSystem context)
 			{
-				return Parent.OpenPackage(Name + '/' + filename, context);
+				// MapPreview stores the inner package's full zip path (e.g. ra/maps/desert-shellmap).
+				// Reopening must not prefix again (would yield ra/maps/ra/maps/... and return null).
+				var rel = filename.Replace('\\', '/');
+				var pfx = Name.Replace('\\', '/').TrimEnd('/');
+
+				if (rel.StartsWith(pfx + "/", StringComparison.OrdinalIgnoreCase) && rel.Length > pfx.Length + 1)
+					return Parent.OpenPackage(rel, context);
+
+				return Parent.OpenPackage(pfx + "/" + rel, context);
 			}
 
 			public void Dispose() { /* nothing to do */ }

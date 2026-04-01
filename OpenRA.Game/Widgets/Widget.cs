@@ -65,6 +65,9 @@ namespace OpenRA.Widgets
 
 		public static Widget OpenWindow(string id, WidgetArgs args)
 		{
+			MouseFocusWidget?.YieldMouseFocus(default);
+			Game.Cursor?.Unlock();
+
 			var window = Game.ModData.WidgetLoader.LoadWidget(args, Root, id);
 			if (WindowList.Count > 0)
 				Root.HideChild(WindowList.Peek());

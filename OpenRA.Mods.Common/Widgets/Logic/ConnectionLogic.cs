@@ -24,7 +24,7 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 		readonly Action onAbort;
 		readonly Action<string> onRetry;
 
-		void ConnectionStateChanged(OrderManager om, string password, NetworkConnection connection)
+		void ConnectionStateChanged(OrderManager om, string password, INetworkConnectionStatus connection)
 		{
 			if (connection.ConnectionState == ConnectionState.Connected)
 			{
@@ -83,6 +83,22 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 				{ "onRetry", onRetry }
 			});
 		}
+
+#if OPENRA_BROWSER
+		public static void ConnectTunnel(BrowserTunnelEndpoint tunnel, string password, Action onConnect, Action onAbort)
+		{
+			Game.JoinServer(tunnel, password);
+			Action<string> onRetry = newPassword => ConnectTunnel(tunnel, newPassword, onConnect, onAbort);
+
+			Ui.OpenWindow("CONNECTING_PANEL", new WidgetArgs()
+			{
+				{ "endpoint", tunnel.DisplayTarget() },
+				{ "onConnect", onConnect },
+				{ "onAbort", onAbort },
+				{ "onRetry", onRetry }
+			});
+		}
+#endif
 	}
 
 	public class ConnectionFailedLogic : ChromeLogic
@@ -104,7 +120,7 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 
 		[ObjectCreator.UseCtor]
 		public ConnectionFailedLogic(Widget widget, ModData modData, OrderManager orderManager,
-			NetworkConnection connection, string password, Action onAbort, Action onQuit, Action<string> onRetry)
+			INetworkConnectionStatus connection, string password, Action onAbort, Action onQuit, Action<string> onRetry)
 		{
 			var panel = widget;
 			var abortButton = panel.Get<ButtonWidget>("ABORT_BUTTON");
@@ -186,7 +202,7 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 		const string ModSwitchFailed = "notification-mod-switch-failed";
 
 		[ObjectCreator.UseCtor]
-		public ConnectionSwitchModLogic(Widget widget, OrderManager orderManager, NetworkConnection connection, Action onAbort, Action<string> onRetry)
+		public ConnectionSwitchModLogic(Widget widget, OrderManager orderManager, INetworkConnectionStatus connection, Action onAbort, Action<string> onRetry)
 		{
 			var panel = widget;
 			var abortButton = panel.Get<ButtonWidget>("ABORT_BUTTON");
@@ -196,21 +212,26 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 			var modTitle = mod.Id;
 			var modVersion = mod.Version;
 
-			switchButton.OnClick = () =>
+			var remote = connection.RemoteEndPoint;
+			switchButton.Visible = remote != null;
+			if (remote != null)
 			{
-				var launchCommand = $"Launch.URI={new UriBuilder("tcp", connection.EndPoint.Address.ToString(), connection.EndPoint.Port)}";
-				Game.SwitchToExternalMod(CurrentServerSettings.ServerExternalMod, new[] { launchCommand }, () =>
+				switchButton.OnClick = () =>
 				{
-					orderManager.ServerError = ModSwitchFailed;
-					Ui.CloseWindow();
-					Ui.OpenWindow("CONNECTIONFAILED_PANEL", new WidgetArgs()
+					var launchCommand = $"Launch.URI={new UriBuilder("tcp", remote.Address.ToString(), remote.Port)}";
+					Game.SwitchToExternalMod(CurrentServerSettings.ServerExternalMod, new[] { launchCommand }, () =>
 					{
-						{ "orderManager", orderManager },
-						{ "onAbort", onAbort },
-						{ "onRetry", onRetry }
+						orderManager.ServerError = ModSwitchFailed;
+						Ui.CloseWindow();
+						Ui.OpenWindow("CONNECTIONFAILED_PANEL", new WidgetArgs()
+						{
+							{ "orderManager", orderManager },
+							{ "onAbort", onAbort },
+							{ "onRetry", onRetry }
+						});
 					});
-				});
-			};
+				};
+			}
 
 			abortButton.Visible = onAbort != null;
 			abortButton.OnClick = () => { Ui.CloseWindow(); onAbort(); };

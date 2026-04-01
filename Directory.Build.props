@@ -18,8 +18,17 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <TargetFramework Condition="'$(MSBuildRuntimeType)'!='Mono'">net6.0</TargetFramework>
+    <!-- Desktop, dedicated server, tests: net9 so `dotnet`/runtime matches typical dev installs (browser build uses same TFM). -->
+    <TargetFramework Condition="'$(MSBuildRuntimeType)'!='Mono'">net9.0</TargetFramework>
     <TargetFramework Condition="'$(MSBuildRuntimeType)'=='Mono'">netstandard2.1</TargetFramework>
+  </PropertyGroup>
+
+  <!-- Browser host stays on default output; engine projects get OPENRA_BROWSER + alternate output. -->
+  <PropertyGroup Condition="'$(OpenRaBrowserBuild)' == 'true' And '$(MSBuildProjectName)' != 'OpenRA.BrowserHost'">
+    <DefineConstants>$(DefineConstants);OPENRA_BROWSER</DefineConstants>
+    <OutputPath>bin\$(Configuration)\$(TargetFramework)\browser\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <LangVersion>12</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -29,7 +38,8 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <!-- Append: OPENRA_BROWSER (and others) are set earlier when OpenRaBrowserBuild is true; do not replace the whole list. -->
+    <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
     <Optimize>false</Optimize>
     <!-- Enable only for Debug builds to improve compile-time performance for Release builds -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
@@ -39,7 +49,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'OpenRA.BrowserHost' And '$(MSBuildProjectName)' != 'OpenRA.BrowserTunnelProxy'">
     <!-- Work around an issue where Rider does not detect files in the project root using the default glob -->
     <Compile Include="**/*.cs" Exclude="$(DefaultItemExcludes)" />
   </ItemGroup>
@@ -52,10 +62,26 @@
   </Target>
 
   <!-- StyleCop/Roslynator -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'OpenRA.BrowserHost' And '$(MSBuildProjectName)' != 'OpenRA.BrowserTunnelProxy'">
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.435" PrivateAssets="All" />
     <!-- Roslynator analyzers fail to run under Mono (AD0001) -->
     <PackageReference Include="Roslynator.Analyzers" Version="4.2.0" PrivateAssets="All" Condition="'$(MSBuildRuntimeType)'!='Mono'" />
     <PackageReference Include="Roslynator.Formatting.Analyzers" Version="4.2.0" PrivateAssets="All" Condition="'$(MSBuildRuntimeType)'!='Mono'" />
   </ItemGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'OpenRA.BrowserHost'">
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+    <!-- Directory.Build.props sets EnableDefaultCompileItems=false for the engine; re-enable SDK defaults so Program.cs and Blazor sources compile. -->
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'OpenRA.BrowserTunnelProxy'">
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
 </Project>

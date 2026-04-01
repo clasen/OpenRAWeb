@@ -45,6 +45,44 @@ namespace OpenRA
 
 		static void LoadAssembly(List<Assembly> assemblyList, string resolvedPath)
 		{
+#if OPENRA_BROWSER
+			if (!File.Exists(resolvedPath))
+			{
+				var simpleName = Path.GetFileNameWithoutExtension(resolvedPath);
+				Assembly asm = null;
+				if (!string.IsNullOrEmpty(simpleName))
+				{
+					foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+						if (string.Equals(a.GetName().Name, simpleName, StringComparison.Ordinal))
+						{
+							asm = a;
+							break;
+						}
+
+					if (asm == null)
+					{
+						try
+						{
+							asm = Assembly.Load(simpleName);
+						}
+						catch
+						{
+							// ignored
+						}
+					}
+				}
+
+				if (asm == null)
+					throw new FileNotFoundException($"Could not find mod assembly (Wasm has no '{resolvedPath}'; ensure the host references it).", resolvedPath);
+
+				var dedupeKey = "browser:" + asm.FullName;
+				if (!ResolvedAssemblies.ContainsKey(dedupeKey))
+					ResolvedAssemblies.Add(dedupeKey, asm);
+
+				assemblyList.Add(asm);
+				return;
+			}
+#endif
 			// .NET doesn't provide any way of querying the metadata of an assembly without either:
 			//   (a) loading duplicate data into the application domain, breaking the world.
 			//   (b) crashing if the assembly has already been loaded.

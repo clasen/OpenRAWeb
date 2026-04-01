@@ -63,6 +63,12 @@ namespace OpenRA.FileSystem
 		{
 			// Raw directories are the easiest and one of the most common cases, so try these first
 			var resolvedPath = Platform.ResolvePath(filename);
+#if OPENRA_BROWSER
+			if (!resolvedPath.Contains('|') && BrowserVirtualEnginePackages.TryOpenPackageForResolvedPath(resolvedPath, out var browserPackage))
+				return browserPackage;
+			if (!resolvedPath.Contains('|') && BrowserSupportHttpContent.TryOpenBrowserSupportHttpFolder(this, resolvedPath, out var supportPackage))
+				return supportPackage;
+#endif
 			if (!resolvedPath.Contains('|') && Directory.Exists(resolvedPath))
 				return new Folder(resolvedPath);
 
@@ -223,6 +229,14 @@ namespace OpenRA.FileSystem
 
 		public bool TryOpen(string filename, out Stream s)
 		{
+			var resolvedPath = Platform.ResolvePath(filename);
+#if OPENRA_BROWSER
+			if (!resolvedPath.Contains('|') && global::OpenRA.BrowserVirtualEnginePackages.TryOpenStreamForResolvedPath(resolvedPath, out s))
+				return true;
+			if (!filename.Contains('|', StringComparison.Ordinal) && global::OpenRA.BrowserEngineLooseHttpFiles.TryOpen(filename, out s))
+				return true;
+#endif
+
 			var explicitSplit = filename.IndexOf('|');
 			if (explicitSplit > 0 && explicitMounts.TryGetValue(filename[..explicitSplit], out var explicitPackage))
 			{

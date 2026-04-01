@@ -24,7 +24,7 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 			var font = Game.Renderer.Fonts[label.Font];
 
 			var luaScript = world.WorldActor.TraitOrDefault<LuaScript>();
-			if (luaScript != null)
+			if (luaScript?.Context != null)
 			{
 				// Native exceptions have OS-dependend line endings, so strip these away as WrapText doesn't handle them
 				var errorMessage = luaScript.Context.ErrorMessage.Replace("\r\n", "\n");

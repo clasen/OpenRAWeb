@@ -18,6 +18,11 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 {
 	public class MultiplayerLogic : ChromeLogic
 	{
+#if OPENRA_BROWSER
+		[FluentReference]
+		const string BrowserTunnelJoinLabel = "button-multiplayer-browser-tunnel-join";
+#endif
+
 		static readonly Action DoNothing = () => { };
 
 		readonly Action onStart;
@@ -57,6 +62,30 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 
 			var hasMaps = modData.MapCache.Any(p => !p.Visibility.HasFlag(MapVisibility.Shellmap));
 			createServerButton.Disabled = !hasMaps;
+
+#if OPENRA_BROWSER
+			// Join-only in browser: no TCP direct connect or local create-server; tunnel URL from settings or session (launch-args join is one-shot).
+			var tunnelUrl = Game.Settings.Game.BrowserMultiplayerTunnelUrl?.Trim();
+			if (string.IsNullOrEmpty(tunnelUrl))
+				tunnelUrl = Game.BrowserSessionTunnelJoinUrl?.Trim();
+
+			if (!string.IsNullOrEmpty(tunnelUrl))
+			{
+				var edgeTok = Game.Settings.Game.BrowserMultiplayerTunnelEdgeToken?.Trim();
+				if (string.IsNullOrEmpty(edgeTok))
+					edgeTok = Game.BrowserSessionTunnelEdgeToken?.Trim();
+				if (string.IsNullOrEmpty(edgeTok))
+					edgeTok = null;
+
+				directConnectButton.GetText = () => FluentProvider.GetMessage(BrowserTunnelJoinLabel);
+				directConnectButton.OnClick = () =>
+					ConnectionLogic.ConnectTunnel(new BrowserTunnelEndpoint(tunnelUrl, edgeTok), "", OpenLobby, DoNothing);
+			}
+			else
+				directConnectButton.IsVisible = () => false;
+
+			createServerButton.IsVisible = () => false;
+#endif
 
 			widget.Get<ButtonWidget>("BACK_BUTTON").OnClick = () => { Ui.CloseWindow(); onExit(); };
 

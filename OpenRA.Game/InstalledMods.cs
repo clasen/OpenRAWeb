@@ -22,13 +22,113 @@ namespace OpenRA
 	{
 		readonly Dictionary<string, Manifest> mods;
 
+#if OPENRA_BROWSER
+		static MemoryStream browserModsZipStream;
+		static ZipFileLoader.ReadOnlyZipFile browserModsZipRoot;
+
+		/// <summary>Embedded mods archive; used to back ^EngineDir paths in Wasm.</summary>
+		public static ZipFileLoader.ReadOnlyZipFile BrowserModZipArchive => browserModsZipRoot;
+#endif
+
 		/// <summary>Initializes the collection of locally installed mods.</summary>
 		/// <param name="searchPaths">Filesystem paths to search for mod packages.</param>
 		/// <param name="explicitPaths">Filesystem paths to additional mod packages.</param>
 		public InstalledMods(IEnumerable<string> searchPaths, IEnumerable<string> explicitPaths)
 		{
+#if OPENRA_BROWSER
+			// Wasm has no real directory for ^EngineDir/mods; ship mods as an embedded zip (see OpenRA.Game.csproj).
+			mods = GetInstalledModsBrowser(searchPaths, explicitPaths);
+#else
 			mods = GetInstalledMods(searchPaths, explicitPaths);
+#endif
 		}
+
+#if OPENRA_BROWSER
+		static Dictionary<string, Manifest> GetInstalledModsBrowser(IEnumerable<string> searchPaths, IEnumerable<string> explicitPaths)
+		{
+			var ret = LoadEmbeddedZipMods() ?? new Dictionary<string, Manifest>();
+
+			foreach (var pair in GetCandidateMods(searchPaths).Concat(explicitPaths.Select(p => (Id: Path.GetFileNameWithoutExtension(p), Path: p))))
+			{
+				var mod = LoadMod(pair.Id, pair.Path);
+				if (mod != null)
+					ret[pair.Id] = mod;
+			}
+
+			return ret;
+		}
+
+		static Dictionary<string, Manifest> LoadEmbeddedZipMods()
+		{
+			try
+			{
+				var asm = typeof(InstalledMods).Assembly;
+				using (var raw = asm.GetManifestResourceStream("OpenRA.BrowserMods.zip"))
+				{
+					if (raw == null)
+						return null;
+
+					browserModsZipStream?.Dispose();
+					browserModsZipRoot?.Dispose();
+
+					browserModsZipStream = new MemoryStream();
+					raw.CopyTo(browserModsZipStream);
+					browserModsZipStream.Position = 0;
+					browserModsZipRoot = new ZipFileLoader.ReadOnlyZipFile(browserModsZipStream, "BrowserMods.zip");
+				}
+
+				const string ModYamlSuffix = "/mod.yaml";
+				var modIds = new HashSet<string>();
+				foreach (var name in browserModsZipRoot.Contents)
+				{
+					if (!name.EndsWith(ModYamlSuffix, StringComparison.OrdinalIgnoreCase))
+						continue;
+
+					var id = name[..^ModYamlSuffix.Length];
+					if (id.Length == 0 || id.Contains('/'))
+						continue;
+
+					modIds.Add(id);
+				}
+
+				var ret = new Dictionary<string, Manifest>();
+				foreach (var id in modIds.OrderBy(x => x, StringComparer.Ordinal))
+				{
+					var sub = browserModsZipRoot.OpenSubfolder(id);
+					var mod = LoadModFromPackage(id, sub);
+					if (mod != null)
+						ret[id] = mod;
+				}
+
+				return ret;
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine("Failed to load embedded browser mods: {0}", e.Message);
+				return null;
+			}
+		}
+
+		static Manifest LoadModFromPackage(string id, IReadOnlyPackage package)
+		{
+			try
+			{
+				if (package == null || !package.Contains("mod.yaml"))
+				{
+					package?.Dispose();
+					return null;
+				}
+
+				return new Manifest(id, package);
+			}
+			catch (Exception e)
+			{
+				Log.Write("debug", $"Load mod package '{id}': {e}");
+				package?.Dispose();
+				return null;
+			}
+		}
+#endif
 
 		static IEnumerable<(string Id, string Path)> GetCandidateMods(IEnumerable<string> searchPaths)
 		{
@@ -56,7 +156,6 @@ namespace OpenRA
 
 		static Manifest LoadMod(string id, string path)
 		{
-			IReadOnlyPackage package = null;
 			try
 			{
 				if (!Directory.Exists(path))
@@ -65,16 +164,16 @@ namespace OpenRA
 					return null;
 				}
 
-				package = new Folder(path);
+				var package = new Folder(path);
 				if (package.Contains("mod.yaml"))
 					return new Manifest(id, package);
+
+				package.Dispose();
 			}
 			catch (Exception e)
 			{
 				Log.Write("debug", $"Load mod '{path}': {e}");
 			}
-
-			package?.Dispose();
 
 			return null;
 		}

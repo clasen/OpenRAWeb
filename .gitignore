@@ -52,5 +52,9 @@ update.log
 # Support directory
 /Support
 
+# Browser host: EA / proprietary game assets (copy from desktop OpenRA; do not commit).
+# See copy-ra-content-to-browser.sh, copy-cnc-content-to-browser.sh, README "Game content".
+OpenRA.BrowserHost/wwwroot/support/
+
 # IntelliJ files
 .idea

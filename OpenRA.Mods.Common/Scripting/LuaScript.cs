@@ -41,14 +41,17 @@ namespace OpenRA.Mods.Common.Scripting
 
 		void IWorldLoaded.WorldLoaded(World world, WorldRenderer worldRenderer)
 		{
+#if !OPENRA_BROWSER
+			// Eluant loads native lua51, which is not available on WebAssembly.
 			var scripts = info.Scripts ?? Enumerable.Empty<string>();
 			Context = new ScriptContext(world, worldRenderer, scripts);
 			Context.WorldLoaded();
+#endif
 		}
 
 		void ITick.Tick(Actor self)
 		{
-			Context.Tick();
+			Context?.Tick();
 		}
 
 		void INotifyActorDisposing.Disposing(Actor self)
@@ -61,6 +64,6 @@ namespace OpenRA.Mods.Common.Scripting
 			disposed = true;
 		}
 
-		public bool FatalErrorOccurred => Context.FatalErrorOccurred;
+		public bool FatalErrorOccurred => Context?.FatalErrorOccurred ?? false;
 	}
 }

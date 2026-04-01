@@ -154,6 +154,9 @@ namespace OpenRA.Server
 
 		public readonly VoteKickTracker VoteKickTracker;
 		readonly PlayerMessageTracker playerMessageTracker;
+		readonly bool runOnMainThread;
+		bool started;
+		bool stopped;
 
 		public ServerState State
 		{
@@ -344,7 +347,91 @@ namespace OpenRA.Server
 				RecordFakeHandshake();
 			}
 
+			StartServerMainThread();
+		}
+
+		/// <summary>Local/skirmish server without TCP (WebAssembly / browser).</summary>
+		public Server(ServerSettings settings, ModData modData, ServerType type, LoopbackChannel loopback)
+		{
+			Log.AddChannel("server", "server.log", true);
+			runOnMainThread = OperatingSystem.IsBrowser();
+
+			Type = type;
+			Settings = settings;
+
+			Settings.Name = Game.Settings.SanitizedServerName(Settings.Name);
+
+			ModData = modData;
+
+			playerDatabase = modData.Manifest.Get<PlayerDatabase>();
+
+			randomSeed = (int)DateTime.Now.ToBinary();
+
+			if (IsMultiplayer && settings.EnableGeoIP)
+				GeoIP.Initialize();
+
+			if (IsMultiplayer)
+				Nat.TryForwardPort(Settings.ListenPort, Settings.ListenPort);
+
+			foreach (var trait in modData.Manifest.ServerTraits)
+				serverTraits.Add(modData.ObjectCreator.CreateObject<ServerTrait>(trait));
+
+			serverTraits.TrimExcess();
+
+			MapStatusCache = new MapStatusCache(modData, MapStatusChanged, type == ServerType.Dedicated && settings.EnableLintChecks);
+
+			playerMessageTracker = new PlayerMessageTracker(this, DispatchOrdersToClient, SendFluentMessageTo);
+			VoteKickTracker = new VoteKickTracker(this);
+
+			LobbyInfo = new Session
+			{
+				GlobalSettings =
+				{
+					RandomSeed = randomSeed,
+					ServerName = settings.Name,
+					EnableSingleplayer = settings.EnableSingleplayer || Type != ServerType.Dedicated,
+					EnableSyncReports = settings.EnableSyncReports,
+					GameUid = Guid.NewGuid().ToString(),
+					Dedicated = Type == ServerType.Dedicated
+				}
+			};
+
+			if (Settings.RecordReplays && Type == ServerType.Dedicated)
+			{
+				recorder = new ReplayRecorder(() => Game.TimestampedFilename(extra: "-Server"));
+
+				// We only need one handshake to initialize the replay.
+				// Add it now, then ignore the redundant handshakes from each client
+				RecordFakeHandshake();
+			}
+
+			events.Add(new CallbackEvent(() => AcceptLoopbackConnection(loopback)));
+			StartServerMainThread();
+		}
+
+		void StartServerMainThread()
+		{
+			if (runOnMainThread)
+				return;
+
 			new Thread(_ =>
+			{
+				while (TickServerCore(true)) { }
+			})
+			{ IsBackground = true }.Start();
+		}
+
+		public void TickMainThread()
+		{
+			if (!runOnMainThread)
+				return;
+
+			TickServerCore(false);
+		}
+
+		bool TickServerCore(bool waitForEvent)
+		{
+			if (!started)
 			{
 				// Note: at least one of these is required to set the initial LobbyInfo.Map and MapStatus
 				foreach (var t in serverTraits.WithInterface<INotifyServerStart>())
@@ -352,53 +439,69 @@ namespace OpenRA.Server
 
 				Log.Write("server", $"Initial mod: {ModData.Manifest.Id}");
 				Log.Write("server", $"Initial map: {LobbyInfo.GlobalSettings.Map}");
+				started = true;
+			}
 
-				while (true)
+			foreach (var c in Conns.ToList())
+				if (c.UsesLoopback)
+					c.PumpLoopback(this);
+
+			if (State != ServerState.ShuttingDown)
+			{
+				if (waitForEvent)
 				{
-					if (State != ServerState.ShuttingDown)
-					{
-						if (events.TryTake(out var e, 1000))
-							e.Invoke(this);
-
-						// PERF: Dedicated servers need to drain the action queue to remove references blocking the GC from cleaning up disposed objects.
-						if (Type == ServerType.Dedicated)
-							Game.PerformDelayedActions();
-
-						foreach (var t in serverTraits.WithInterface<ITick>())
-							t.Tick(this);
-
-						if (State == ServerState.GameStarted)
-						{
-							foreach (var (playerIndex, scale) in orderBuffer.GetTickScales())
-							{
-								var frame = CreateTickScaleFrame(scale);
-								var con = Conns.SingleOrDefault(c => c.PlayerIndex == playerIndex);
-
-								if (con != null && con.Validated)
-									DispatchFrameToClient(con, playerIndex, frame);
-							}
-						}
-					}
-
-					if (State == ServerState.ShuttingDown)
-					{
-						EndGame();
-						if (IsMultiplayer)
-							Nat.TryRemovePortForward();
-						break;
-					}
+					if (events.TryTake(out var e, 1000))
+						e.Invoke(this);
+				}
+				else
+				{
+					while (events.TryTake(out var e))
+						e.Invoke(this);
 				}
 
-				foreach (var t in serverTraits.WithInterface<INotifyServerShutdown>())
-					t.ServerShutdown(this);
+				// PERF: Dedicated servers need to drain the action queue to remove references blocking the GC from cleaning up disposed objects.
+				if (Type == ServerType.Dedicated)
+					Game.PerformDelayedActions();
 
-				// Make sure to immediately close connections after the server is shutdown, we don't want to keep clients waiting
-				foreach (var c in Conns)
-					c.Dispose();
+				foreach (var t in serverTraits.WithInterface<ITick>())
+					t.Tick(this);
 
-				Conns.Clear();
-			})
-			{ IsBackground = true }.Start();
+				if (State == ServerState.GameStarted && orderBuffer != null)
+				{
+					foreach (var (playerIndex, scale) in orderBuffer.GetTickScales())
+					{
+						var frame = CreateTickScaleFrame(scale);
+						var con = Conns.SingleOrDefault(c => c.PlayerIndex == playerIndex);
+
+						if (con != null && con.Validated)
+							DispatchFrameToClient(con, playerIndex, frame);
+					}
+				}
+			}
+
+			if (State == ServerState.ShuttingDown)
+			{
+				if (!stopped)
+				{
+					EndGame();
+					if (IsMultiplayer)
+						Nat.TryRemovePortForward();
+
+					foreach (var t in serverTraits.WithInterface<INotifyServerShutdown>())
+						t.ServerShutdown(this);
+
+					// Make sure to immediately close connections after the server is shutdown, we don't want to keep clients waiting
+					foreach (var c in Conns)
+						c.Dispose();
+
+					Conns.Clear();
+					stopped = true;
+				}
+
+				return false;
+			}
+
+			return true;
 		}
 
 		int nextPlayerIndex;
@@ -441,6 +544,43 @@ namespace OpenRA.Server
 				newConn.TrySendData(ms.ToArray());
 
 				// Dispatch a handshake order
+				var request = new HandshakeRequest
+				{
+					Mod = ModData.Manifest.Id,
+					Version = ModData.Manifest.Metadata.Version,
+					AuthToken = token
+				};
+
+				DispatchOrdersToClient(newConn, 0, 0, new Order("HandshakeRequest", null, false)
+				{
+					Type = OrderType.Handshake,
+					IsImmediate = true,
+					TargetString = request.Serialize()
+				}.Serialize());
+			}
+			catch (Exception e)
+			{
+				Log.Write("server", $"Handshake for client {newConn.EndPoint} failed: {e}");
+			}
+
+			Conns.Add(newConn);
+		}
+
+		void AcceptLoopbackConnection(LoopbackChannel channel)
+		{
+			if (State != ServerState.WaitingPlayers)
+				return;
+
+			var token = Convert.ToBase64String(OpenRA.Exts.MakeArray(256, _ => (byte)Random.Next()));
+
+			var newConn = new Connection(this, channel, token);
+			try
+			{
+				var ms = new MemoryStream(8);
+				ms.Write(ProtocolVersion.Handshake);
+				ms.Write(newConn.PlayerIndex);
+				newConn.TrySendData(ms.ToArray());
+
 				var request = new HandshakeRequest
 				{
 					Mod = ModData.Manifest.Id,

@@ -128,15 +128,33 @@ namespace OpenRA
 
 		public void InitializeLoaders(IReadOnlyFileSystem fileSystem)
 		{
+#if OPENRA_BROWSER
+			Console.WriteLine("[browser-init] InitializeLoaders: ChromeMetrics.Initialize");
+#endif
 			// all this manipulation of static crap here is nasty and breaks
 			// horribly when you use ModData in unexpected ways.
 			ChromeMetrics.Initialize(this);
+#if OPENRA_BROWSER
+			Console.WriteLine("[browser-init] InitializeLoaders: ChromeProvider.Initialize");
+#endif
 			ChromeProvider.Initialize(this);
+#if OPENRA_BROWSER
+			Console.WriteLine("[browser-init] InitializeLoaders: FluentProvider.Initialize");
+#endif
 			FluentProvider.Initialize(this, fileSystem);
 
+#if OPENRA_BROWSER
+			Console.WriteLine("[browser-init] InitializeLoaders: Sound.Initialize");
+#endif
 			Game.Sound.Initialize(SoundLoaders, fileSystem);
 
+#if OPENRA_BROWSER
+			Console.WriteLine("[browser-init] InitializeLoaders: CursorProvider");
+#endif
 			CursorProvider = new CursorProvider(this);
+#if OPENRA_BROWSER
+			Console.WriteLine("[browser-init] InitializeLoaders: done");
+#endif
 		}
 
 		public IEnumerable<string> Languages { get; }
@@ -148,9 +166,14 @@ namespace OpenRA
 			if (MapCache[uid].Status != MapStatus.Available)
 				throw new InvalidDataException($"Invalid map uid: {uid}");
 
+			var preview = MapCache[uid];
+			var mapPackage = preview.Package;
+			if (mapPackage == null)
+				throw new InvalidDataException($"Could not reopen map package for uid '{uid}' (entry '{preview.PackageName}').");
+
 			Map map;
 			using (new Support.PerfTimer("Map"))
-				map = new Map(this, MapCache[uid].Package);
+				map = new Map(this, mapPackage);
 
 			// Reinitialize all our assets
 			InitializeLoaders(map);

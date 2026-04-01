@@ -293,6 +293,41 @@ namespace OpenRA
 			generatingMinimap = false;
 		}
 
+#if OPENRA_BROWSER
+		/// <summary>
+		/// When <see cref="MapCache.LoadPreviewImages"/> is false during <see cref="MapCache.LoadMaps"/>,
+		/// load <c>map.png</c> on demand for minimap upload (browser-only to speed initial map scan).
+		/// </summary>
+		internal bool TryLoadEmbeddedMapPreviewIfNeeded()
+		{
+			if (innerData.Preview != null)
+				return true;
+
+			if (Status != MapStatus.Available)
+				return false;
+
+			try
+			{
+				if (!Package.Contains("map.png"))
+					return false;
+
+				using (var dataStream = Package.GetStream("map.png"))
+				{
+					var newData = innerData.Clone();
+					newData.Preview = new Png(dataStream);
+					innerData = newData;
+				}
+
+				return true;
+			}
+			catch (Exception e)
+			{
+				Log.Write("debug", "Browser deferred map.png load failed: " + e.Message);
+				return false;
+			}
+		}
+#endif
+
 		public bool DefinesUnsafeCustomRules()
 		{
 			return Ruleset.DefinesUnsafeCustomRules(modData, this, innerData.RuleDefinitions,
@@ -477,7 +512,15 @@ namespace OpenRA
 				using (var dataStream = p.GetStream("map.png"))
 					newData.Preview = new Png(dataStream);
 
-			newData.ModifiedDate = File.GetLastWriteTime(p.Name);
+			// Package names are often virtual (e.g. zip subpaths); Wasm has no backing file path.
+			try
+			{
+				newData.ModifiedDate = File.GetLastWriteTime(p.Name);
+			}
+			catch
+			{
+				newData.ModifiedDate = DateTime.MinValue;
+			}
 
 			// Assign the new data atomically
 			innerData = newData;

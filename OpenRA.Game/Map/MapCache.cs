@@ -36,6 +36,9 @@ namespace OpenRA
 		readonly SheetBuilder sheetBuilder;
 		Thread previewLoaderThread;
 		bool previewLoaderThreadShutDown = true;
+#if OPENRA_BROWSER
+		bool browserMinimapDrainPosted;
+#endif
 		readonly object syncRoot = new();
 		readonly Queue<MapPreview> generateMinimap = new();
 
@@ -82,15 +85,13 @@ namespace OpenRA
 				tracker.UpdateMaps(this);
 		}
 
-		public void LoadMaps()
+		void RegisterMapPackages()
 		{
-			// Utility mod that does not support maps
 			if (!modData.Manifest.Contains<MapGrid>())
 				return;
 
 			var mapGrid = modData.Manifest.Get<MapGrid>();
 
-			// Enumerate map directories
 			foreach (var kv in modData.Manifest.MapFolders)
 			{
 				var name = kv.Key;
@@ -104,8 +105,6 @@ namespace OpenRA
 
 				try
 				{
-					// HACK: If the path is inside the support directory then we may need to create it
-					// Assume that the path is a directory if there is not an existing file with the same name
 					var resolved = Platform.ResolvePath(name);
 					if (resolved.StartsWith(Platform.SupportDir, StringComparison.Ordinal) && !File.Exists(resolved))
 						Directory.CreateDirectory(resolved);
@@ -123,8 +122,15 @@ namespace OpenRA
 				mapLocations.Add(package, classification);
 				mapDirectoryTrackers.Add(new MapDirectoryTracker(mapGrid, package, classification));
 			}
+		}
 
-			// PERF: Load the mod YAML once outside the loop, and reuse it when resolving each maps custom YAML.
+		public void LoadMaps()
+		{
+			RegisterMapPackages();
+			if (!modData.Manifest.Contains<MapGrid>())
+				return;
+
+			var mapGrid = modData.Manifest.Get<MapGrid>();
 			var modDataRules = modData.GetRulesYaml();
 			foreach (var kv in MapLocations)
 			{
@@ -132,9 +138,45 @@ namespace OpenRA
 					LoadMapInternal(map, kv.Key, kv.Value, mapGrid, null, modDataRules);
 			}
 
-			// We only want to track maps in runtime, not at loadtime
 			LastModifiedMap = null;
 		}
+
+#if OPENRA_BROWSER
+		/// <summary>Mount map folders only; call <see cref="LoadMapContentsInChunksAsync"/> before using the cache (Wasm: yields between chunks).</summary>
+		public void PrepareMapLocationsOnly() => RegisterMapPackages();
+
+		/// <summary>Load each map entry with <see cref="Task.Yield"/> between chunks so the browser event loop can run.</summary>
+		public async Task LoadMapContentsInChunksAsync(int mapsPerChunk, CancellationToken cancellationToken = default)
+		{
+			if (mapsPerChunk < 1)
+				throw new ArgumentOutOfRangeException(nameof(mapsPerChunk));
+
+			if (!modData.Manifest.Contains<MapGrid>())
+				return;
+
+			var mapGrid = modData.Manifest.Get<MapGrid>();
+			var modDataRules = modData.GetRulesYaml();
+			var work = new List<(string Map, IReadOnlyPackage Package, MapClassification Classification)>();
+			foreach (var kv in MapLocations)
+				foreach (var map in kv.Key.Contents)
+					work.Add((map, kv.Key, kv.Value));
+
+			for (var i = 0; i < work.Count; i += mapsPerChunk)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				var end = Math.Min(i + mapsPerChunk, work.Count);
+				for (var j = i; j < end; j++)
+				{
+					var w = work[j];
+					LoadMapInternal(w.Map, w.Package, w.Classification, mapGrid, null, modDataRules);
+				}
+
+				LastModifiedMap = null;
+				modData.HandleLoadingProgress();
+				await Task.Yield();
+			}
+		}
+#endif
 
 		public void LoadMap(string map, IReadOnlyPackage package, MapClassification classification, MapGrid mapGrid, string oldMap)
 		{
@@ -388,6 +430,14 @@ namespace OpenRA
 
 		public void CacheMinimap(MapPreview preview)
 		{
+#if OPENRA_BROWSER
+			// Blazor WebAssembly: background threads + Thread.Sleep/Join are unsafe; drain on the main tick.
+			lock (syncRoot)
+				generateMinimap.Enqueue(preview);
+
+			ScheduleBrowserMinimapDrain();
+			return;
+#endif
 			bool launchPreviewLoaderThread;
 			lock (syncRoot)
 			{
@@ -410,6 +460,59 @@ namespace OpenRA
 					previewLoaderThread.Start();
 				});
 		}
+
+#if OPENRA_BROWSER
+		void ScheduleBrowserMinimapDrain()
+		{
+			lock (syncRoot)
+			{
+				if (browserMinimapDrainPosted)
+					return;
+				browserMinimapDrainPosted = true;
+			}
+
+			Game.RunAfterTick(ProcessBrowserMinimapQueueOnce);
+		}
+
+		void ProcessBrowserMinimapQueueOnce()
+		{
+			lock (syncRoot)
+				browserMinimapDrainPosted = false;
+
+			List<MapPreview> todo;
+			lock (syncRoot)
+			{
+				todo = generateMinimap.Where(p => p.GetMinimap() == null).ToList();
+				generateMinimap.Clear();
+			}
+
+			foreach (var p in todo)
+			{
+				p.TryLoadEmbeddedMapPreviewIfNeeded();
+				if (p.Preview != null)
+				{
+					try
+					{
+						p.SetMinimap(sheetBuilder.Add(p.Preview));
+					}
+					catch (Exception e)
+					{
+						Log.Write("debug", "Failed to load minimap with exception:");
+						Log.Write("debug", e);
+					}
+				}
+			}
+
+			Game.RunAfterTick(() => sheetBuilder.Current.ReleaseBuffer());
+
+			var more = false;
+			lock (syncRoot)
+				more = generateMinimap.Count > 0;
+
+			if (more)
+				ScheduleBrowserMinimapDrain();
+		}
+#endif
 
 		bool IsSuitableInitialMap(MapPreview map)
 		{

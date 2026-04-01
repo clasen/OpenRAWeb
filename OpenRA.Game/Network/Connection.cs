@@ -39,6 +39,25 @@ namespace OpenRA.Network
 		void Receive(OrderManager orderManager);
 	}
 
+	/// <summary>
+	/// Network transports that participate in the desktop connection UI (TCP or browser tunnel).
+	/// </summary>
+	public interface INetworkConnectionStatus : IConnection
+	{
+		ConnectionState ConnectionState { get; }
+		string ErrorMessage { get; }
+		ConnectionTarget Target { get; }
+
+		/// <summary>Remote TCP endpoint when the client used direct TCP; null for WebSocket tunnel transports.</summary>
+		IPEndPoint RemoteEndPoint { get; }
+
+		/// <summary>Non-null when reconnect should use the browser WebSocket tunnel URL instead of TCP.</summary>
+		string? BrowserTunnelReconnectUrl => null;
+
+		/// <summary>Optional <c>X-OpenRA-Tunnel-Token</c> for tunnel reconnect when <see cref="BrowserTunnelReconnectUrl"/> is set.</summary>
+		string? BrowserTunnelReconnectEdgeToken => null;
+	}
+
 	public sealed class EchoConnection : IConnection
 	{
 		const int LocalClientId = 1;
@@ -96,7 +115,7 @@ namespace OpenRA.Network
 		}
 	}
 
-	public sealed class NetworkConnection : IConnection
+	public sealed class NetworkConnection : IConnection, INetworkConnectionStatus
 	{
 		public readonly ConnectionTarget Target;
 		internal ReplayRecorder Recorder { get; private set; }
@@ -126,6 +145,10 @@ namespace OpenRA.Network
 		public IPEndPoint EndPoint { get; private set; }
 
 		public string ErrorMessage { get; private set; }
+
+		ConnectionTarget INetworkConnectionStatus.Target => Target;
+
+		IPEndPoint INetworkConnectionStatus.RemoteEndPoint => EndPoint;
 
 		void NetworkConnectionConnect()
 		{

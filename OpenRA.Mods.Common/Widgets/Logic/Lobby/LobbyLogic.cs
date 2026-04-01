@@ -114,7 +114,7 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 		bool MapIsPlayable => (mapStatus & Session.MapStatus.Playable) == Session.MapStatus.Playable;
 
 		// Listen for connection failures
-		void ConnectionStateChanged(OrderManager om, string password, NetworkConnection connection)
+		void ConnectionStateChanged(OrderManager om, string password, INetworkConnectionStatus connection)
 		{
 			if (connection.ConnectionState == ConnectionState.NotConnected)
 			{
@@ -131,7 +131,22 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 					});
 				}
 
+#if OPENRA_BROWSER
+				Action<string> onRetry = pass =>
+				{
+					if (!string.IsNullOrEmpty(connection.BrowserTunnelReconnectUrl))
+					{
+						var tunnelEp = new BrowserTunnelEndpoint(
+							connection.BrowserTunnelReconnectUrl,
+							connection.BrowserTunnelReconnectEdgeToken);
+						ConnectionLogic.ConnectTunnel(tunnelEp, pass, OnConnect, onExit);
+					}
+					else
+						ConnectionLogic.Connect(connection.Target, pass, OnConnect, onExit);
+				};
+#else
 				Action<string> onRetry = pass => ConnectionLogic.Connect(connection.Target, pass, OnConnect, onExit);
+#endif
 
 				var switchPanel = CurrentServerSettings.ServerExternalMod != null ? "CONNECTION_SWITCHMOD_PANEL" : "CONNECTIONFAILED_PANEL";
 				Ui.OpenWindow(switchPanel, new WidgetArgs()
@@ -886,8 +901,9 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 				string secret = null;
 				if (orderManager.LobbyInfo.GlobalSettings.Dedicated)
 				{
-					var endpoint = CurrentServerSettings.Target.GetConnectEndPoints().First();
-					secret = string.Concat(endpoint.Address, "|", endpoint.Port);
+					var endpoint = CurrentServerSettings.Target.GetConnectEndPoints().FirstOrDefault();
+					if (endpoint != null)
+						secret = string.Concat(endpoint.Address, "|", endpoint.Port);
 				}
 
 				var state = skirmishMode ? DiscordState.InSkirmishLobby : DiscordState.InMultiplayerLobby;

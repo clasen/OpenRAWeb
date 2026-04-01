@@ -16,7 +16,8 @@ else
 fi
 
 Name="${Name:-"Dedicated Server"}"
-Mod="${Mod:-"ra"}"
+# Default cnc matches OpenRA.BrowserHost / docs (browser multiplayer); override: Mod=ra ./launch-dedicated.sh
+Mod="${Mod:-"cnc"}"
 Map="${Map:-""}"
 ListenPort="${ListenPort:-"1234"}"
 AdvertiseOnline="${AdvertiseOnline:-"True"}"

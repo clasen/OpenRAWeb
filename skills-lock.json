@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "computedHash": "972ff8c61bef9fdf6e4b0664f231412544fa1c411b2a2751f32355d0df6bd490"
+    },
+    "deepbase": {
+      "source": "clasen/deepbase",
+      "sourceType": "github",
+      "computedHash": "06583c7e1828490c43b5ba9de5706eead9f912a498b0abe744e8457b00ce3102"
+    },
+    "sharp": {
+      "source": "clasen/skills",
+      "sourceType": "github",
+      "computedHash": "dd99425fe5f89975633f4cd7bf58df3c0903ff8d8cec89dd8f6d3e4e127746bc"
+    }
+  }
+}

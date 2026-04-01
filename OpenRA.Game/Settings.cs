@@ -204,7 +204,7 @@ namespace OpenRA
 		public int MaxFramerate = 60;
 
 		[Desc("Set a frame rate limit of 1 render frame per game simulation frame (overrides CapFramerate/MaxFramerate).")]
-		public bool CapFramerateToGameFps = false;
+		public bool CapFramerateToGameFps = true;
 
 		[Desc("Disable the OpenGL debug message callback feature.")]
 		public bool DisableGLDebugMessageCallback = false;
@@ -296,6 +296,12 @@ namespace OpenRA
 		public bool EnableDiscordService = true;
 
 		public TextNotificationPoolFilters TextNotificationPoolFilters = TextNotificationPoolFilters.Feedback | TextNotificationPoolFilters.Transients;
+
+		[Desc("Browser build only: WebSocket tunnel URL for the multiplayer panel quick-join (ws:// or wss://).")]
+		public string BrowserMultiplayerTunnelUrl = "";
+
+		[Desc("Browser build only: optional EDGE_TOKEN sent as X-OpenRA-Tunnel-Token with that tunnel.")]
+		public string BrowserMultiplayerTunnelEdgeToken = "";
 	}
 
 	public class Settings

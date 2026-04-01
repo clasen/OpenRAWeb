@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Skip StaticWebAssets gzip/br pipeline: large synced wwwroot (mods) triggers SDK 9 duplicate-key / lock issues. -->
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.5" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenRA.Game\OpenRA.Game.csproj" AdditionalProperties="OpenRaBrowserBuild=true" />
+    <ProjectReference Include="..\OpenRA.Mods.Common\OpenRA.Mods.Common.csproj" AdditionalProperties="OpenRaBrowserBuild=true" />
+    <ProjectReference Include="..\OpenRA.Mods.Cnc\OpenRA.Mods.Cnc.csproj" AdditionalProperties="OpenRaBrowserBuild=true" />
+    <ProjectReference Include="..\OpenRA.Platforms.Browser\OpenRA.Platforms.Browser.csproj" AdditionalProperties="OpenRaBrowserBuild=true" />
+  </ItemGroup>
+
+  <!-- Run before static web asset discovery so files copied into wwwroot are served in dev. -->
+  <Target Name="SyncOpenRAEngineAssets" BeforeTargets="BeforeBuild;ResolveStaticWebAssetsInputs">
+    <MakeDir Directories="$(MSBuildThisFileDirectory)wwwroot/engine" />
+    <MakeDir Directories="$(MSBuildThisFileDirectory)wwwroot/support" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)../VERSION" DestinationFolder="$(MSBuildThisFileDirectory)wwwroot/engine" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildThisFileDirectory)../VERSION')" />
+  </Target>
+
+  <Target Name="SyncOpenRAMods" BeforeTargets="BeforeBuild;ResolveStaticWebAssetsInputs">
+    <ItemGroup>
+      <_ModFiles Include="$(MSBuildThisFileDirectory)../mods/**/*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ModFiles)" DestinationFiles="@(_ModFiles->'$(MSBuildThisFileDirectory)wwwroot/engine/mods/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="SyncOpenRAGlsl" BeforeTargets="BeforeBuild;ResolveStaticWebAssetsInputs">
+    <ItemGroup>
+      <_GlslFiles Include="$(MSBuildThisFileDirectory)../glsl/**/*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_GlslFiles)" DestinationFiles="@(_GlslFiles->'$(MSBuildThisFileDirectory)wwwroot/engine/glsl/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Optional: bake ORBF blobs into wwwroot/engine/baked-fonts. Build OpenRA.FontBake first. -->
+  <PropertyGroup>
+    <OpenRaBakeFontSizes Condition="'$(OpenRaBakeFontSizes)'==''">10,12,14,18,24,32</OpenRaBakeFontSizes>
+    <OpenRaBakeFontScales Condition="'$(OpenRaBakeFontScales)'==''">1,2</OpenRaBakeFontScales>
+  </PropertyGroup>
+  <Target Name="OpenRaBakeBrowserFonts" BeforeTargets="BeforeBuild" Condition="'$(OpenRaBakeBrowserFonts)'=='true'">
+    <Error Text="Set OpenRaBakeFontInput to an existing .ttf (see wwwroot/engine/baked-fonts/README.txt)." Condition="'$(OpenRaBakeFontInput)'=='' Or !Exists('$(OpenRaBakeFontInput)')" />
+    <Exec WorkingDirectory="$(MSBuildThisFileDirectory)/.."
+          Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../OpenRA.FontBake/OpenRA.FontBake.csproj&quot; -c $(Configuration) -- --input &quot;$(OpenRaBakeFontInput)&quot; --output &quot;$(MSBuildThisFileDirectory)wwwroot/engine/baked-fonts&quot; --sizes $(OpenRaBakeFontSizes) --scales $(OpenRaBakeFontScales)" />
+  </Target>
+
+</Project>

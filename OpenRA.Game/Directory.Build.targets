@@ -1,0 +1,6 @@
+<Project>
+  <!-- Microsoft.CSharp.targets resets CreateManifestResourceNamesDependsOn; extend it after SDK imports. -->
+  <PropertyGroup Condition="'$(OpenRaBrowserBuild)' == 'true'">
+    <CreateManifestResourceNamesDependsOn>IncludeBrowserModsZipResource;$(CreateManifestResourceNamesDependsOn)</CreateManifestResourceNamesDependsOn>
+  </PropertyGroup>
+</Project>

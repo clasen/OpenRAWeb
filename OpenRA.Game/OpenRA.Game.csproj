@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>OpenRA</RootNamespace>
   </PropertyGroup>
@@ -9,6 +9,45 @@
   <ItemGroup Condition="'$(MSBuildRuntimeType)'=='Mono'">
     <PackageReference Include="System.Collections.Immutable" Version="6.0.0" />
   </ItemGroup>
+  <ItemGroup Condition="'$(OpenRaBrowserBuild)' == 'true'">
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../glsl/*.vert" Link="BrowserGlsl\%(Filename)%(Extension)">
+      <Type>Non-Resx</Type>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../glsl/*.frag" Link="BrowserGlsl\%(Filename)%(Extension)">
+      <Type>Non-Resx</Type>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../global mix database.dat" LogicalName="OpenRA.BrowserGlobalMixDatabase.dat" Condition="Exists('$(MSBuildThisFileDirectory)../global mix database.dat')">
+      <Type>Non-Resx</Type>
+      <WithCulture>false</WithCulture>
+      <Link>BrowserGlobalMixDatabase.dat</Link>
+    </EmbeddedResource>
+    <!-- Incremental input for browser-mods.zip (InstalledMods loads OpenRA.BrowserMods.zip in Wasm). -->
+    <_BrowserModInput Include="$(MSBuildThisFileDirectory)../mods/**" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(OpenRaBrowserBuild)' == 'true'">
+    <BrowserModsSourceDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../mods'))</BrowserModsSourceDir>
+    <!-- IntermediateOutputPath is not set when this PropertyGroup runs; mirror obj/$(Configuration)/$(TargetFramework)/. -->
+    <BrowserModsZipPath>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/browser-mods.zip</BrowserModsZipPath>
+  </PropertyGroup>
+
+  <!-- Zip is incremental; EmbeddedResource must be added every build even when zip is skipped (SDK incremental targets). -->
+  <Target Name="BuildBrowserModsZip" Condition="'$(OpenRaBrowserBuild)' == 'true'" Inputs="@(_BrowserModInput)" Outputs="$(BrowserModsZipPath)">
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))" WorkingDirectory="$(BrowserModsSourceDir)" Command="zip -qr &quot;$(BrowserModsZipPath)&quot; ." />
+    <Exec Condition="$([MSBuild]::IsOSPlatform('Windows'))" Command="powershell -NoProfile -NonInteractive -Command &quot;$m='$(BrowserModsSourceDir)'; $z='$(BrowserModsZipPath)'; if (Test-Path $z) { Remove-Item -LiteralPath $z -Force }; Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory($m, $z)&quot;" />
+  </Target>
+
+  <Target Name="IncludeBrowserModsZipResource" DependsOnTargets="BuildBrowserModsZip" Condition="'$(OpenRaBrowserBuild)' == 'true'">
+    <ItemGroup>
+      <EmbeddedResource Include="$(BrowserModsZipPath)" LogicalName="OpenRA.BrowserMods.zip" Condition="Exists('$(BrowserModsZipPath)')">
+        <Type>Non-Resx</Type>
+        <WithCulture>false</WithCulture>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <PackageReference Include="Linguini.Bundle" Version="0.8.1" />
     <PackageReference Include="OpenRA-Eluant" Version="1.0.22" />

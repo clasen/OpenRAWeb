@@ -1,0 +1,127 @@
+GPU / FPS (query string on the Blazor app URL)
+----------------------------------------------
+Replace BASE with your origin (e.g. http://localhost:5284/). Order of params does not matter.
+
+Default internal canvas: 1024x576. Engine default if you omit flags: VSync on, render capped to game tick
+(CapFramerateToGameFps=true → one render per simulation tick).
+
+--- Resolution (optional) ---
+  res=540|low       960x540
+  res=576|balanced  1024x576 (default)
+  res=720|hd|high   1280x720
+  res=900           1600x900
+  res=1080|fhd      1920x1080
+  w=800&h=450       custom (clamped)
+
+  perf=1            low-res 960x540 + UIScale=0.9 (FPS unchanged unless you add maxFps/fps/uncapped URL flags)
+
+--- VSync (optional; omit = engine default True) ---
+  vsync=0           Graphics.VSync=False (often higher FPS counter; possible tearing)
+  vsync=1           Graphics.VSync=True (explicit)
+
+--- Frame limit (first match wins) ---
+  capTick=1  OR totick=1   CapFramerateToGameFps: one render per simulation tick (stable, not “uncapped”)
+  maxFps=N               CapFramerate=True, MaxFramerate=N (1..300)
+  fps=N                  same as maxFps if maxFps not set
+  maxFps=0 OR fps=uncapped OR uncapped=1   no cap (CapFramerate=False)
+
+  Note: capTick overrides maxFps/fps if both are present.
+
+--- Other ---
+  uiScale=0.85
+  viewport=Close|Medium|Far|Native
+
+Console: [browser perf] canvas internal WxH; Graphics: ...
+
+--- Example URLs (copy-paste) ---
+BASE/
+  Defaults: 1024x576, VSync on, render capped to game tick.
+
+BASE/?vsync=0
+  VSync off; still tick-capped render unless you add maxFps/fps/uncapped (good to see if GPU was waiting on vsync).
+
+BASE/?maxFps=60
+  Hard cap 60 FPS (CapFramerate on).
+
+BASE/?maxFps=120&vsync=0
+  120 FPS cap, no vsync.
+
+BASE/?fps=uncapped&vsync=0
+  Explicit uncapped + no vsync.
+
+BASE/?capTick=1
+  Render locked to game tick (typical OpenRA logic rate; smoothness differs from uncapped).
+
+BASE/?capTick=1&vsync=1
+  Tick-limited render + VSync on.
+
+BASE/?perf=1&capTick=1&vsync=0
+  Potato resolution + tick cap + no VSync.
+
+BASE/?res=720&maxFps=60&vsync=1
+  720p, 60 FPS cap, VSync on (console-like).
+
+HTTP caching for browser host (support assets)
+==============================================
+
+The WebAssembly client uses HttpClient (browser fetch). Responses for
+  support/Content/ra/v2/*
+can be stored in the browser HTTP cache if the server sends Cache-Control.
+
+Development (dotnet run / Blazor DevServer)
+--------------------------------------------
+The dev server may send short-lived or no-cache headers. Repeat visits still
+benefit from IndexedDB (see wwwroot/js/openra-asset-cache.js) populated after
+the first successful download.
+
+Production / static hosting
+----------------------------
+Configure your reverse proxy or static host to send long-lived caching for game
+content under /support/Content/, for example:
+
+  Cache-Control: public, max-age=86400
+
+Use immutable only if you change URLs when replacing files (e.g. fingerprinted
+paths). If URLs stay fixed, use a long max-age and rely on hard refresh or bump
+BrowserSupportHttpContent.RaV2BrowserAssetCacheVersion in OpenRA.Game when the
+manifest or assets change (invalidates IndexedDB keys).
+
+Example (nginx):
+
+  location /support/Content/ {
+    add_header Cache-Control "public, max-age=604800";
+    try_files $uri =404;
+  }
+
+Example (Caddy):
+
+  @support path /support/Content/*
+  header @support Cache-Control "public, max-age=604800"
+
+Cross-origin support assets (CDN)
+---------------------------------
+The app can fetch only game content from a different http(s) base URL using the
+query parameter supportOrigin= (URL-encoded absolute URL, trailing slash optional).
+Engine/mod files still load from the Blazor app origin.
+
+The CDN (or static bucket) must mirror the same paths as wwwroot/support/, e.g.
+  {supportOrigin}support/Content/ra/v2/allies.mix
+
+Browsers require CORS on that host: Access-Control-Allow-Origin matching the page
+that hosts OpenRA (or * for public assets if your policy allows).
+
+Structural loading improvements (browser / Wasm only)
+-------------------------------------------------------
+These are not implemented in code yet; they apply only to the browser pipeline.
+
+- Replace synchronous HTTP fallback in BrowserSupportHttpFolderPackage (GetAwaiter().GetResult
+  on cache miss) with async prefetch or a small worker queue so the main loop never blocks.
+- Optional single-bundle or HTTP Range-based asset delivery to cut round-trips versus many
+  parallel GETs (requires a new package type or host layout).
+- Lazy or chunked MapCache.LoadMaps (spread across ticks) if init time remains a bottleneck
+  after deferred map.png loading (OPENRA_BROWSER + LoadPreviewImages=false).
+
+Baseline metrics in the browser console (cold vs warm IndexedDB + HTTP cache):
+- [browser perf] host preloadMs=...   (Blazor preload of DefaultRaV2PreloadOrder)
+- [browser perf] init totalMs=...   (Game.Initialize including mod load)
+- [browser perf] mod=... frames=... (once per second while running)

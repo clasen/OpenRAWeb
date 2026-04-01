@@ -41,7 +41,12 @@ namespace OpenRA.Graphics
 
 		public CursorManager(CursorProvider cursorProvider, int cursorSheetSize)
 		{
+#if OPENRA_BROWSER
+			// Browser window does not implement native hardware cursors; skip creation to avoid console spam.
+			hardwareCursorsDisabled = true;
+#else
 			hardwareCursorsDisabled = Game.Settings.Graphics.DisableHardwareCursors;
+#endif
 
 			graphicSettings = Game.Settings.Graphics;
 			sheetBuilder = new SheetBuilder(SheetType.BGRA, cursorSheetSize);

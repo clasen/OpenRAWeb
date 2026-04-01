@@ -51,6 +51,12 @@ namespace OpenRA.Mods.Common.Widgets
 				normalSelectionColor = Color.White;
 		}
 
+		public override bool YieldMouseFocus(MouseInput mi)
+		{
+			isDragging = false;
+			return base.YieldMouseFocus(mi);
+		}
+
 		public override void Draw()
 		{
 			var modifiers = Game.GetModifierKeys();

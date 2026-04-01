@@ -283,8 +283,52 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 
 			Game.OnShellmapLoaded += OpenMenuBasedOnLastGame;
 
+#if OPENRA_BROWSER
+			ScheduleBrowserTunnelAutoJoin();
+#endif
+
 			DiscordService.UpdateStatus(DiscordState.InMenu);
 		}
+
+#if OPENRA_BROWSER
+		void ScheduleBrowserTunnelAutoJoin()
+		{
+			if (string.IsNullOrEmpty(Game.BrowserPendingTunnelJoinUrl))
+				return;
+
+			var tunnelUrl = Game.BrowserPendingTunnelJoinUrl;
+			Game.BrowserPendingTunnelJoinUrl = null;
+			var tunnelEdge = Game.BrowserPendingTunnelEdgeToken;
+			Game.BrowserPendingTunnelEdgeToken = null;
+
+			Game.BrowserSessionTunnelJoinUrl = tunnelUrl;
+			Game.BrowserSessionTunnelEdgeToken = tunnelEdge;
+
+			Game.RunAfterTick(() =>
+			{
+				try
+				{
+					var endpoint = new BrowserTunnelEndpoint(tunnelUrl, tunnelEdge);
+					ConnectionLogic.ConnectTunnel(endpoint, "",
+						() =>
+						{
+							SwitchMenu(MenuType.None);
+							Game.OpenWindow("SERVER_LOBBY", new WidgetArgs
+							{
+								{ "onExit", () => { Game.Disconnect(); SwitchMenu(MenuType.Main); } },
+								{ "onStart", () => { RemoveShellmapUI(); lastGameState = MenuPanel.Multiplayer; } },
+								{ "skirmishMode", false }
+							});
+						},
+						() => { });
+				}
+				catch (Exception ex)
+				{
+					Log.Write("client", $"Invalid Browser.TunnelUrl: {ex.Message}");
+				}
+			});
+		}
+#endif
 
 		void LoadAndDisplayNews(WebServices webServices, Widget newsBG)
 		{
@@ -457,6 +501,18 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 			var map = modData.MapCache.ChooseInitialMap(modData.MapCache.PickLastModifiedMap(MapVisibility.Lobby) ?? Game.Settings.Server.Map, Game.CosmeticRandom);
 			Game.Settings.Server.Map = map;
 			Game.Settings.Save();
+
+			if (OperatingSystem.IsBrowser())
+			{
+				var conn = Game.CreateBrowserLoopbackLocalServer(map, true);
+				Game.JoinServer(conn, "");
+				Game.RunWhenLoopbackConnected(conn, OpenSkirmishLobbyPanel, () =>
+				{
+					Game.CloseServer();
+					SwitchMenu(MenuType.Main);
+				});
+				return;
+			}
 
 			ConnectionLogic.Connect(Game.CreateLocalServer(map, isSkirmish: true),
 				"",

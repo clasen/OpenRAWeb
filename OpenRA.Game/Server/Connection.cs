@@ -18,6 +18,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using OpenRA.Network;
 
 namespace OpenRA.Server
 {
@@ -43,6 +44,13 @@ namespace OpenRA.Server
 
 		readonly BlockingCollection<byte[]> sendQueue = new();
 		readonly Queue<int> pingHistory = new();
+		readonly LoopbackChannel loopbackChannel;
+		readonly List<byte> loopbackReadBuffer = new();
+		readonly Stopwatch loopbackPingSent = Stopwatch.StartNew();
+		ReceiveState loopbackState = ReceiveState.Header;
+		int loopbackExpectLength = 8;
+		int loopbackFrame;
+		bool loopbackDisconnected;
 
 		public Connection(Server server, Socket socket, string authToken)
 		{
@@ -55,6 +63,94 @@ namespace OpenRA.Server
 				Name = $"Client communication ({EndPoint}",
 				IsBackground = true
 			}.Start((server, socket));
+		}
+
+		public Connection(Server server, LoopbackChannel channel, string authToken)
+		{
+			PlayerIndex = server.ChooseFreePlayerIndex();
+			AuthToken = authToken;
+			EndPoint = new IPEndPoint(IPAddress.Loopback, 0);
+			loopbackChannel = channel;
+		}
+
+		internal bool UsesLoopback => loopbackChannel != null;
+
+		internal void PumpLoopback(Server server)
+		{
+			if (!UsesLoopback || loopbackDisconnected)
+				return;
+
+			while (loopbackChannel.TryTakeClientForServer(out var chunk, 0))
+			{
+				loopbackReadBuffer.AddRange(chunk);
+				lastReceivedTime = Game.RunTime;
+				TimeoutMessageShown = false;
+			}
+
+			while (loopbackReadBuffer.Count >= loopbackExpectLength)
+			{
+				var bytes = loopbackReadBuffer.GetRange(0, loopbackExpectLength).ToArray();
+				loopbackReadBuffer.RemoveRange(0, loopbackExpectLength);
+
+				switch (loopbackState)
+				{
+					case ReceiveState.Header:
+					{
+						loopbackExpectLength = BitConverter.ToInt32(bytes, 0) - 4;
+						loopbackFrame = BitConverter.ToInt32(bytes, 4);
+						loopbackState = ReceiveState.Data;
+
+						if (loopbackExpectLength < 0 || (server.IsMultiplayer && loopbackExpectLength > MaxOrderLength))
+						{
+							Log.Write("server", $"Closing loopback connection to {EndPoint} because of excessive order length: {loopbackExpectLength}");
+							NotifyLoopbackDisconnect(server);
+							return;
+						}
+
+						break;
+					}
+
+					case ReceiveState.Data:
+					{
+						if (loopbackExpectLength == 10 && bytes[0] == (byte)OrderType.Ping)
+						{
+							if (pingHistory.Count == MaxPingSamples)
+								pingHistory.Dequeue();
+
+							pingHistory.Enqueue((int)(Game.RunTime - BitConverter.ToInt64(bytes, 1)));
+							server.OnConnectionPing(this, pingHistory.ToArray(), bytes[9]);
+						}
+						else
+							server.OnConnectionPacket(this, loopbackFrame, bytes);
+
+						loopbackExpectLength = 8;
+						loopbackState = ReceiveState.Header;
+
+						break;
+					}
+				}
+			}
+
+			if (loopbackChannel.ClientToServerCompleted || sendQueue.IsCompleted)
+			{
+				NotifyLoopbackDisconnect(server);
+				return;
+			}
+
+			if (loopbackPingSent.ElapsedMilliseconds > 1000 && TrySendData(CreatePingFrame()))
+				loopbackPingSent.Restart();
+
+			while (sendQueue.TryTake(out var data, 0))
+				loopbackChannel.SendFromServer(data);
+		}
+
+		void NotifyLoopbackDisconnect(Server server)
+		{
+			if (loopbackDisconnected)
+				return;
+
+			loopbackDisconnected = true;
+			server.OnConnectionDisconnect(this);
 		}
 
 		static byte[] CreatePingFrame()

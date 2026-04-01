@@ -27,10 +27,13 @@ using OpenRA.Widgets;
 
 namespace OpenRA
 {
-	public static class Game
+	public static partial class Game
 	{
 		[FluentReference("filename")]
 		const string SavedScreenshot = "notification-saved-screenshot";
+
+		/// <summary>Optional browser-build logging for mod init; calls are removed when <c>OPENRA_BROWSER</c> is not defined.</summary>
+		static partial void LogBrowserModInit(string mod, string stage);
 
 		public const int TimestepJankThreshold = 250; // Don't catch up for delays larger than 250ms
 
@@ -61,6 +64,40 @@ namespace OpenRA
 
 		public static event Action OnShellmapLoaded = () => { };
 
+#if OPENRA_BROWSER
+		/// <summary>When set from launch args (<c>Browser.TunnelUrl=</c>), the main menu may auto-join this WebSocket tunnel once.</summary>
+		public static string BrowserPendingTunnelJoinUrl { get; set; }
+
+		/// <summary>Optional <c>Browser.TunnelEdgeToken=</c> for <c>X-OpenRA-Tunnel-Token</c> on that join.</summary>
+		public static string BrowserPendingTunnelEdgeToken { get; set; }
+
+		/// <summary>
+		/// Last tunnel URL from launch-args auto-join, kept for the process so multiplayer UI can offer tunnel join again after leaving a match
+		/// (pending URL is one-shot; settings file is often unset in browser flows).
+		/// </summary>
+		public static string BrowserSessionTunnelJoinUrl { get; set; }
+
+		/// <summary>Edge token paired with <see cref="BrowserSessionTunnelJoinUrl"/> when the launch flow supplied one.</summary>
+		public static string BrowserSessionTunnelEdgeToken { get; set; }
+
+		public static OrderManager JoinServer(BrowserTunnelEndpoint tunnel, string password, bool recordReplay = true)
+		{
+			var newConnection = new BrowserTunnelConnection(tunnel);
+			if (recordReplay)
+				newConnection.StartRecording(() => TimestampedFilename());
+
+			var om = new OrderManager(newConnection);
+			JoinInner(om);
+			CurrentServerSettings.Password = password;
+			CurrentServerSettings.Target = newConnection.Target;
+
+			lastConnectionState = ConnectionState.PreConnecting;
+			ConnectionStateChanged(OrderManager, password, newConnection);
+
+			return om;
+		}
+#endif
+
 		public static OrderManager JoinServer(ConnectionTarget endpoint, string password, bool recordReplay = true)
 		{
 			var newConnection = new NetworkConnection(endpoint);
@@ -76,6 +113,90 @@ namespace OpenRA
 			ConnectionStateChanged(OrderManager, password, newConnection);
 
 			return om;
+		}
+
+		public static OrderManager JoinServer(IConnection connection, string password, bool recordReplay = true)
+		{
+			if (recordReplay)
+			{
+				if (connection is NetworkConnection nc0)
+					nc0.StartRecording(() => TimestampedFilename());
+				else if (connection is LoopbackNetworkConnection lc0)
+					lc0.StartRecording(() => TimestampedFilename());
+#if OPENRA_BROWSER
+				else if (connection is BrowserTunnelConnection btc0)
+					btc0.StartRecording(() => TimestampedFilename());
+#endif
+			}
+
+			var om = new OrderManager(connection);
+			JoinInner(om);
+			CurrentServerSettings.Password = password;
+			CurrentServerSettings.Target = connection switch
+			{
+				NetworkConnection n => n.Target,
+				LoopbackNetworkConnection l => l.Target,
+#if OPENRA_BROWSER
+				BrowserTunnelConnection b => b.Target,
+#endif
+				_ => new ConnectionTarget()
+			};
+
+			if (connection is NetworkConnection nc)
+			{
+				lastConnectionState = ConnectionState.PreConnecting;
+				ConnectionStateChanged(OrderManager, password, nc);
+			}
+#if OPENRA_BROWSER
+			else if (connection is BrowserTunnelConnection btc)
+			{
+				lastConnectionState = ConnectionState.PreConnecting;
+				ConnectionStateChanged(OrderManager, password, btc);
+			}
+#endif
+			else if (connection is LoopbackNetworkConnection)
+				lastConnectionState = ConnectionState.Connected;
+
+			return om;
+		}
+
+		public static LoopbackNetworkConnection CreateBrowserLoopbackLocalServer(string mapUid, bool isSkirmish = false)
+		{
+			var settings = new ServerSettings()
+			{
+				Name = "Skirmish Game",
+				Map = mapUid,
+				AdvertiseOnline = false
+			};
+
+			var channel = new LoopbackChannel();
+			server = new Server.Server(settings, ModData, isSkirmish ? ServerType.Skirmish : ServerType.Local, channel);
+			return new LoopbackNetworkConnection(channel);
+		}
+
+		public static void RunWhenLoopbackConnected(LoopbackNetworkConnection connection, Action onConnected, Action onFailure)
+		{
+			var ticks = 0;
+			void Step()
+			{
+				ticks++;
+				if (connection.ConnectionState == ConnectionState.Connected)
+				{
+					onConnected();
+					return;
+				}
+
+				if (connection.ConnectionState == ConnectionState.NotConnected || ticks > 600)
+				{
+					Disconnect();
+					onFailure();
+					return;
+				}
+
+				RunAfterTick(Step);
+			}
+
+			RunAfterTick(Step);
 		}
 
 		public static string TimestampedFilename(bool includemilliseconds = false, string extra = "")
@@ -134,7 +255,7 @@ namespace OpenRA
 		public static int LocalTick => OrderManager.LocalFrameNumber;
 
 		public static event Action<ConnectionTarget> OnRemoteDirectConnect = _ => { };
-		public static event Action<OrderManager, string, NetworkConnection> ConnectionStateChanged = (om, pass, conn) => { };
+		public static event Action<OrderManager, string, INetworkConnectionStatus> ConnectionStateChanged = (om, pass, conn) => { };
 		static ConnectionState lastConnectionState = ConnectionState.PreConnecting;
 		public static int LocalClientId => OrderManager.Connection.LocalClientId;
 
@@ -222,7 +343,8 @@ namespace OpenRA
 			// - We can remove any fragmentation in the LOH caused by temporary loading garbage.
 			// - A loading screen is visible, so a delay won't matter to the user.
 			//   Much better to clean up now then to drop frames during gameplay for GC pauses.
-			GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+			if (!OperatingSystem.IsBrowser())
+				GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
 			GC.Collect();
 
 			// PostLoadComplete is designed for anything that should trigger at the very end of loading.
@@ -282,7 +404,10 @@ namespace OpenRA
 
 			LobbyInfoChanged += LobbyReady;
 
-			om = JoinServer(CreateLocalServer(mapUID), "");
+			if (OperatingSystem.IsBrowser())
+				om = JoinServer(CreateBrowserLoopbackLocalServer(mapUID), "");
+			else
+				om = JoinServer(CreateLocalServer(mapUID), "");
 		}
 
 		public static bool IsHost
@@ -359,6 +484,26 @@ namespace OpenRA
 			Log.AddChannel("nat", "nat.log");
 			Log.AddChannel("client", "client.log");
 
+#if OPENRA_BROWSER
+			Settings.Game.Platform = "Browser";
+			try
+			{
+				// Load via reflection to avoid a circular ProjectReference (Game ↔ Platforms.Browser).
+				var browserAsm = System.Reflection.Assembly.Load("OpenRA.Platforms.Browser");
+				var platformType = browserAsm.GetType("OpenRA.Platforms.Browser.BrowserPlatform", throwOnError: true);
+				var platform = (IPlatform)platformType.GetConstructor(Type.EmptyTypes).Invoke(null);
+				Renderer = new Renderer(platform, Settings.Graphics);
+				Sound = new Sound(platform, Settings.Sound);
+			}
+			catch (Exception e)
+			{
+				Log.Write("graphics", $"{e}");
+				Console.WriteLine("Browser renderer initialization failed. Check graphics.log for details.");
+				Renderer?.Dispose();
+				Sound?.Dispose();
+				throw;
+			}
+#else
 			var platforms = new[] { Settings.Game.Platform, "Default", null };
 			foreach (var p in platforms)
 			{
@@ -384,8 +529,11 @@ namespace OpenRA
 					Sound?.Dispose();
 				}
 			}
+#endif
 
+#if !OPENRA_BROWSER
 			Nat.Initialize();
+#endif
 
 			var modSearchArg = args.GetValue("Engine.ModSearchPaths", null);
 			var modSearchPaths = modSearchArg != null ?
@@ -472,26 +620,82 @@ namespace OpenRA
 			if (mod == null)
 				throw new InvalidOperationException("Game.Mod argument missing.");
 
+#if OPENRA_BROWSER
+			BrowserPendingTunnelJoinUrl = args.GetValue("Browser.TunnelUrl", null);
+			if (string.IsNullOrWhiteSpace(BrowserPendingTunnelJoinUrl))
+				BrowserPendingTunnelJoinUrl = null;
+
+			BrowserPendingTunnelEdgeToken = args.GetValue("Browser.TunnelEdgeToken", null);
+			if (string.IsNullOrWhiteSpace(BrowserPendingTunnelEdgeToken))
+				BrowserPendingTunnelEdgeToken = null;
+
+			BrowserSessionTunnelJoinUrl = null;
+			BrowserSessionTunnelEdgeToken = null;
+#endif
+
 			if (!Mods.ContainsKey(mod))
 				throw new InvalidOperationException($"Unknown or invalid mod '{mod}'.");
 
 			Console.WriteLine($"Loading mod: {mod}");
+			LogBrowserModInit(mod, "begin");
+
+#if OPENRA_BROWSER
+			BrowserModLoadAborted = false;
+#endif
 
 			Sound.StopVideo();
 
+			LogBrowserModInit(mod, "create ModData");
 			ModData = new ModData(Mods[mod], Mods, true);
+			LogBrowserModInit(mod, "ModData created");
 
 			LocalPlayerProfile = new LocalPlayerProfile(Path.Combine(Platform.SupportDir, Settings.Game.AuthProfile), ModData.Manifest.Get<PlayerDatabase>());
 
+			LogBrowserModInit(mod, "BeforeLoad");
 			if (!ModData.LoadScreen.BeforeLoad())
-				return;
+			{
+				LogBrowserModInit(mod, "BeforeLoad returned false");
+#if OPENRA_BROWSER
+				BrowserModLoadAborted = true;
+				LogBrowserModInit(mod, "stopping browser loop after aborted load");
+				Exit();
+#endif
 
+				return;
+			}
+
+			LogBrowserModInit(mod, "BeforeLoad ok");
+
+			LogBrowserModInit(mod, "InitializeLoaders");
 			ModData.InitializeLoaders(ModData.DefaultFileSystem);
+			LogBrowserModInit(mod, "InitializeFonts");
 			Renderer.InitializeFonts(ModData);
 
+#if OPENRA_BROWSER
+			ModData.MapCache.LoadPreviewImages = false;
+			if (ModData.Manifest.Contains<MapGrid>())
+			{
+				LogBrowserModInit(mod, "LoadMaps");
+				using (new PerfTimer("LoadMaps.Prepare"))
+					ModData.MapCache.PrepareMapLocationsOnly();
+				LogBrowserModInit(mod, "LoadMaps prepare (contents async)");
+				BrowserMapContentsLoadPending = true;
+				browserPendingInitArgs = args;
+				browserPendingModId = mod;
+				return;
+			}
+#endif
+
+			LogBrowserModInit(mod, "LoadMaps");
 			using (new PerfTimer("LoadMaps"))
 				ModData.MapCache.LoadMaps();
+			LogBrowserModInit(mod, "LoadMaps done");
 
+			InitializeModAfterLoadMaps(mod, args);
+		}
+
+		static void InitializeModAfterLoadMaps(string mod, Arguments args)
+		{
 			var grid = ModData.Manifest.Contains<MapGrid>() ? ModData.Manifest.Get<MapGrid>() : null;
 			Renderer.InitializeDepthBuffer(grid);
 
@@ -510,8 +714,10 @@ namespace OpenRA
 			PerfHistory.Items["terrain_lighting"].HasNormalTick = false;
 
 			JoinLocal();
+			LogBrowserModInit(mod, "StartGame");
 
 			ModData.LoadScreen.StartGame(args);
+			LogBrowserModInit(mod, "done");
 		}
 
 		public static void LoadEditor(string mapUid)
@@ -545,6 +751,9 @@ namespace OpenRA
 
 		public static void SwitchToExternalMod(ExternalMod mod, string[] launchArguments = null, Action onFailed = null)
 		{
+#if OPENRA_BROWSER
+			onFailed?.Invoke();
+#else
 			try
 			{
 				var path = mod.LaunchPath;
@@ -570,6 +779,7 @@ namespace OpenRA
 				Log.Write("debug", "Error was: " + e.Message);
 				onFailed();
 			}
+#endif
 		}
 
 		static RunStatus state = RunStatus.Running;
@@ -653,11 +863,12 @@ namespace OpenRA
 		static void LogicTick()
 		{
 			PerformDelayedActions();
+			server?.TickMainThread();
 
-			if (OrderManager.Connection is NetworkConnection nc && nc.ConnectionState != lastConnectionState)
+			if (OrderManager.Connection is INetworkConnectionStatus nets && nets.ConnectionState != lastConnectionState)
 			{
-				lastConnectionState = nc.ConnectionState;
-				ConnectionStateChanged(OrderManager, null, nc);
+				lastConnectionState = nets.ConnectionState;
+				ConnectionStateChanged(OrderManager, null, nets);
 			}
 
 			InnerLogicTick(OrderManager);
@@ -729,8 +940,13 @@ namespace OpenRA
 					}
 				}
 
+				// Pre-game lobby: Game.OrderManager is the network/loopback client (World null) while the shellmap
+				// still renders under worldRenderer. Input must use that visible world or PumpInput becomes a no-op.
+				var inputWorld = OrderManager.World ?? worldRenderer?.World;
 				using (new PerfSample("render_flip"))
-					Renderer.EndFrame(new DefaultInputHandler(OrderManager.World));
+					Renderer.EndFrame(inputWorld != null
+						? new DefaultInputHandler(inputWorld)
+						: new NullInputHandler());
 
 				if (takeScreenshot)
 				{

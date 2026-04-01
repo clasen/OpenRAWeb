@@ -145,6 +145,12 @@ namespace OpenRA
 				ruleset = new Ruleset(actors, weapons, voices, notifications, music, null, modelSequences);
 			}
 
+#if OPENRA_BROWSER
+			// WebAssembly is effectively single-threaded: starting a Task then blocking with Wait()
+			// prevents the task from ever running, deadlocking CursorProvider (first DefaultRules access).
+			modData.HandleLoadingProgress();
+			LoadRuleset();
+#else
 			if (modData.IsOnMainThread)
 			{
 				modData.HandleLoadingProgress();
@@ -158,6 +164,7 @@ namespace OpenRA
 			}
 			else
 				LoadRuleset();
+#endif
 
 			return ruleset;
 		}
@@ -207,6 +214,10 @@ namespace OpenRA
 				ruleset = new Ruleset(actors, weapons, voices, notifications, music, terrainInfo, modelSequences);
 			}
 
+#if OPENRA_BROWSER
+			modData.HandleLoadingProgress();
+			LoadRuleset();
+#else
 			if (modData.IsOnMainThread)
 			{
 				modData.HandleLoadingProgress();
@@ -220,6 +231,7 @@ namespace OpenRA
 			}
 			else
 				LoadRuleset();
+#endif
 
 			return ruleset;
 		}
