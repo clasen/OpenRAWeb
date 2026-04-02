@@ -54,7 +54,7 @@ namespace OpenRA.Graphics
 				return false;
 			}
 
-			if (!blob.Slice(0, MagicLength).SequenceEqual(MagicBytes))
+			if (!blob[..MagicLength].SequenceEqual(MagicBytes))
 			{
 				error = "Invalid magic.";
 				return false;
@@ -135,7 +135,7 @@ namespace OpenRA.Graphics
 					var h = BitConverter.ToUInt16(blob.Slice(off, 2));
 					off += 2;
 
-					var count = (int)w * (int)h;
+					var count = w * h;
 					if (count < 0 || off + count > blob.Length)
 					{
 						error = "Truncated glyph bitmap.";

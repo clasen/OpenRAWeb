@@ -21,7 +21,7 @@ namespace OpenRA
 
 	public enum SupportDirType { System, ModernUser, LegacyUser, User }
 
-	public static partial class Platform
+	public static class Platform
 	{
 		public static PlatformType CurrentPlatform => LazyCurrentPlatform.Value;
 		public static Architecture CurrentArchitecture => RuntimeInformation.ProcessArchitecture;

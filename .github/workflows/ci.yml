@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   linux:
-    name: Linux (.NET 6.0)
+    name: Linux (.NET 9.0)
     runs-on: ubuntu-22.04
 
     steps:
@@ -20,10 +20,10 @@ jobs:
       - name: Clone Repository
         uses: actions/checkout@v4
 
-      - name: Install .NET 6.0
+      - name: Install .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '9.0.x'
 
       - name: Check Code
         run: |
@@ -36,8 +36,10 @@ jobs:
           make check-scripts
           make TREAT_WARNINGS_AS_ERRORS=true test
 
+  # Mono MSBuild + netstandard2.1 is not maintained for this fork (desktop/browser use .NET 9).
   linux-mono:
     name: Linux (mono)
+    if: false
     runs-on: ubuntu-22.04
 
     steps:
@@ -55,17 +57,17 @@ jobs:
           make RUNTIME=mono TREAT_WARNINGS_AS_ERRORS=true test
 
   windows:
-    name: Windows (.NET 6.0)
-    runs-on: windows-2019
+    name: Windows (.NET 9.0)
+    runs-on: windows-2022
 
     steps:
       - name: Clone Repository
         uses: actions/checkout@v4
 
-      - name: Install .NET 6.0
+      - name: Install .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '9.0.x'
 
       - name: Check Code
         shell: powershell

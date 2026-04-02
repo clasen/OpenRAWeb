@@ -28,7 +28,7 @@ namespace OpenRA.Network
 			| (buffer[offset + 3] << 24);
 
 		/// <summary>When buffer has fewer than 8 bytes, returns false and <paramref name="errorMessage"/> is null.</summary>
-		public static bool TryConsumeHandshake(List<byte> buffer, out int clientId, out string? errorMessage)
+		public static bool TryConsumeHandshake(List<byte> buffer, out int clientId, out string errorMessage)
 		{
 			clientId = 0;
 			errorMessage = null;
@@ -53,7 +53,7 @@ namespace OpenRA.Network
 		/// Consumes one framed packet (length, client id, payload). Returns false with null error if more bytes are needed;
 		/// false with non-null error on protocol violation.
 		/// </summary>
-		public static bool TryConsumePacket(List<byte> buffer, out int fromClient, out byte[] payload, out string? errorMessage)
+		public static bool TryConsumePacket(List<byte> buffer, out int fromClient, out byte[] payload, out string errorMessage)
 		{
 			fromClient = 0;
 			payload = null;

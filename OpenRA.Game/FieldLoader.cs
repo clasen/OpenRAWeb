@@ -47,11 +47,14 @@ namespace OpenRA
 				Missing = missing;
 			}
 
+			[Obsolete("Supports obsolete formatter-based serialization.", DiagnosticId = "SYSLIB0051", UrlFormat = "https://aka.ms/dotnet-warnings/{0}")]
 			public override void GetObjectData(SerializationInfo info, StreamingContext context)
 			{
+#pragma warning disable SYSLIB0051
 				base.GetObjectData(info, context);
 				info.AddValue("Missing", Missing);
 				info.AddValue("Header", Header);
+#pragma warning restore SYSLIB0051
 			}
 		}
 

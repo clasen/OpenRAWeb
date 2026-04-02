@@ -211,7 +211,7 @@ namespace OpenRA.Mods.Common.Widgets
 			this.markerLayerOverlay = markerLayerOverlay;
 			tiles = new Dictionary<int, HashSet<CPos>>(markerLayerOverlay.Tiles);
 
-			var allTilesCount = tiles.Values.Select(x => x.Count).Sum();
+			var allTilesCount = tiles.Values.Sum(x => x.Count);
 
 			Text = FluentProvider.GetMessage(ClearedAllMarkerTiles, "amount", allTilesCount);
 		}

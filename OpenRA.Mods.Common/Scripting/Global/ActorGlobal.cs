@@ -13,7 +13,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+#if !NET9_0_OR_GREATER
 using System.Runtime.Serialization;
+#endif
 using Eluant;
 using OpenRA.Mods.Common.Traits;
 using OpenRA.Primitives;
@@ -36,7 +39,11 @@ namespace OpenRA.Mods.Common.Scripting
 				throw new LuaException($"Unknown initializer type '{initInstance[0]}'");
 
 			// Construct the ActorInit.
+#if NET9_0_OR_GREATER
+			var init = (ActorInit)RuntimeHelpers.GetUninitializedObject(initType);
+#else
 			var init = (ActorInit)FormatterServices.GetUninitializedObject(initType);
+#endif
 			if (initInstance.Length > 1)
 				initType.GetField(nameof(ActorInit.InstanceName)).SetValue(init, initInstance[1]);
 

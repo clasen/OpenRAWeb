@@ -52,10 +52,10 @@ namespace OpenRA.Network
 		IPEndPoint RemoteEndPoint { get; }
 
 		/// <summary>Non-null when reconnect should use the browser WebSocket tunnel URL instead of TCP.</summary>
-		string? BrowserTunnelReconnectUrl => null;
+		string BrowserTunnelReconnectUrl => null;
 
 		/// <summary>Optional <c>X-OpenRA-Tunnel-Token</c> for tunnel reconnect when <see cref="BrowserTunnelReconnectUrl"/> is set.</summary>
-		string? BrowserTunnelReconnectEdgeToken => null;
+		string BrowserTunnelReconnectEdgeToken => null;
 	}
 
 	public sealed class EchoConnection : IConnection

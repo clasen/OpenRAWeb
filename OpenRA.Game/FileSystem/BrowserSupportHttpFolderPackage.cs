@@ -25,7 +25,8 @@ namespace OpenRA.FileSystem
 		static readonly Dictionary<string, byte[]> prefetchedAssets = new(StringComparer.OrdinalIgnoreCase);
 
 		/// <summary>
-		/// Base URL (with trailing slash) used for GETs under <c>support/Content/…</c>. Uses <see cref="Game.WasmSupportAssetsBaseUrl"/> when set and valid http(s), else <see cref="Game.WasmHttpOrigin"/>.
+		/// Base URL (with trailing slash) for GETs under <c>support/Content/…</c>.
+		/// Uses <see cref="Game.WasmSupportAssetsBaseUrl"/> when set and valid http(s), else <see cref="Game.WasmHttpOrigin"/>.
 		/// </summary>
 		public static string EffectiveSupportAssetsOrigin()
 		{
@@ -88,7 +89,10 @@ namespace OpenRA.FileSystem
 			"expand/mrise1.aud", "expand/mwrench1.aud", "expand/myeehaw1.aud", "expand/myes1.aud",
 		};
 
-		/// <summary>Paths relative to <c>Content/cnc/</c>: required <c>mods/cnc/mod.yaml</c> packages (optional <c>scores.mix</c> excluded; add file to wwwroot to enable menu music).</summary>
+		/// <summary>
+		/// Paths under <c>Content/cnc/</c>: required <c>mods/cnc/mod.yaml</c> packages.
+		/// Optional <c>scores.mix</c> excluded; add under wwwroot to enable menu music.
+		/// </summary>
 		public static readonly string[] DefaultCncManifest =
 		{
 			"speech.mix", "conquer.mix", "sounds.mix", "tempicnh.mix", "temperat.mix", "winter.mix", "desert.mix",

@@ -166,8 +166,10 @@ namespace OpenRA.FontBake
 					var existing = JsonSerializer.Deserialize<BakedFontManifest>(File.ReadAllText(manifestPath));
 					if (existing?.Files != null)
 					{
-						var set = new HashSet<string>(existing.Files, StringComparer.Ordinal);
-						set.Add(Path.GetFileName(outFile));
+						var set = new HashSet<string>(existing.Files, StringComparer.Ordinal)
+						{
+							Path.GetFileName(outFile)
+						};
 						manifest.Files = set.OrderBy(s => s).ToList();
 					}
 				}

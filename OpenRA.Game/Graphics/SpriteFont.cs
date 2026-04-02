@@ -247,7 +247,7 @@ namespace OpenRA.Graphics
 
 		/// <summary>
 		/// Vertical size for one line of text for layout (UI units). Uses actual glyph pixel extents
-		/// relative to the baseline (same space as <see cref="DrawText"/> offsets), so centering
+		/// relative to the baseline (same space as <see cref="DrawText(string, float2, Color)"/> offsets), so centering
 		/// matches rasterized output across platforms (e.g. browser vs FreeType). Never below nominal
 		/// <see cref="size"/> so line spacing and multi-line layout stay stable.
 		/// </summary>
