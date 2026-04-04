@@ -21,23 +21,6 @@ The **dedicated OpenRA server** is still the normal binary that listens on **TCP
 - **Auto-join URL:** `?tunnel=ws://…` or `?tunnel=wss://…` is turned into `Browser.TunnelUrl=` in [`OpenRA.BrowserHost/Components/OpenRAHost.razor`](OpenRA.BrowserHost/Components/OpenRAHost.razor). Menu behaviour under `OPENRA_BROWSER` is in [`MainMenuLogic.cs`](OpenRA.Mods.Common/Widgets/Logic/MainMenuLogic.cs) and [`MultiplayerLogic.cs`](OpenRA.Mods.Common/Widgets/Logic/MultiplayerLogic.cs).
 - **Architecture:** [`docs/browser-multiplayer/01-architecture-and-scope.md`](docs/browser-multiplayer/01-architecture-and-scope.md).
 
-```mermaid
-flowchart LR
-  subgraph browser [Browser]
-    BrowserWasm[Wasm_client]
-  end
-  subgraph infra [Infrastructure]
-    TunnelProxy[Tunnel_proxy]
-    DedicatedServer[Dedicated_TCP]
-  end
-  subgraph desktop [Desktop_optional]
-    DesktopClient[Desktop_client]
-  end
-  BrowserWasm -->|binary_WebSocket| TunnelProxy
-  TunnelProxy -->|TCP_stream| DedicatedServer
-  DesktopClient -->|TCP_stream| DedicatedServer
-```
-
 ### `run-*` scripts (quick reference)
 
 | Script | Role |
