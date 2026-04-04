@@ -6,6 +6,12 @@ html, body {
     background: #000;
 }
 
+/* OpenRA draws the cursor in the canvas; hide the system pointer while the host is mounted (letterbox + inherited hit targets). */
+html:has(.openra-host-shell),
+html:has(.openra-host-shell) body {
+    cursor: none;
+}
+
 #app {
     height: 100%;
 }

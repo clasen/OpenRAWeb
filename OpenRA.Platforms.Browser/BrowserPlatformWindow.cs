@@ -130,24 +130,28 @@ namespace OpenRA.Platforms.Browser
 			Console.WriteLine($"Browser canvas: {w}x{h} (WebGL2)");
 		}
 
-		public void ApplyCanvasSize(int width, int height)
+		public void ApplyCanvasSize(int physicalWidth, int physicalHeight, int cssWidth = 0, int cssHeight = 0)
 		{
-			if (width <= 0 || height <= 0)
+			if (physicalWidth <= 0 || physicalHeight <= 0)
 				return;
+
+			var logicalW = cssWidth > 0 ? cssWidth : physicalWidth;
+			var logicalH = cssHeight > 0 ? cssHeight : physicalHeight;
+			var dpr = (float)physicalWidth / logicalW;
 
 			float oldNative, oldEff, newNative, newEff;
 			lock (syncObject)
 			{
 				oldNative = windowScale;
 				oldEff = windowScale * scaleModifier;
-				windowSize = new Size(width, height);
-				surfaceSize = new Size(width, height);
-				windowScale = 1f;
+				windowSize = new Size(logicalW, logicalH);
+				surfaceSize = new Size(physicalWidth, physicalHeight);
+				windowScale = dpr;
 				newNative = windowScale;
 				newEff = windowScale * scaleModifier;
 			}
 
-			WebGLInterop.ResizeBackingStore(width, height);
+			WebGLInterop.ResizeBackingStore(physicalWidth, physicalHeight);
 			OnWindowScaleChanged(oldNative, oldEff, newNative, newEff);
 		}
 

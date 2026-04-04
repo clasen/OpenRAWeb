@@ -57,7 +57,7 @@ namespace OpenRA.Platforms.Browser
 						device.HasInputFocus = false;
 						break;
 					case BrowserInputKind.Resize:
-						device.ApplyCanvasSize(ev.X, ev.Y);
+						device.ApplyCanvasSize(ev.X, ev.Y, ev.Dx, ev.Dy);
 						break;
 					case BrowserInputKind.MouseMove:
 					{

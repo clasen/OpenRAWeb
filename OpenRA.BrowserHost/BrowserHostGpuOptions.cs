@@ -22,9 +22,9 @@ namespace OpenRA.BrowserHost;
 		/// <summary>Engine <c>Game.Mod=</c> (query <c>mod=</c>); default <c>ra</c> so <c>wwwroot/support/Content/ra/v2</c> matches <c>copy-ra-content-to-browser.sh</c>. Use <c>?mod=cnc</c> with <c>copy-cnc-content-to-browser.sh</c>.</summary>
 		public string BrowserGameMod { get; init; }
 
-	/// <summary>Default internal resolution (16:9, fewer pixels than 720p for fill-rate).</summary>
-	public const int DefaultCanvasWidth = 1024;
-	public const int DefaultCanvasHeight = 576;
+	/// <summary>Default internal resolution (16:9, 720p).</summary>
+	public const int DefaultCanvasWidth = 1280;
+	public const int DefaultCanvasHeight = 720;
 
 	/// <summary>
 	/// Parse <paramref name="navigationUri"/> query. See <c>HTTP-CACHE-NOTES.txt</c> for URL recipes.
@@ -89,7 +89,7 @@ namespace OpenRA.BrowserHost;
 
 		var graphics = new List<string>();
 
-		var viewport = "Close";
+		var viewport = "Medium";
 		if (q.TryGetValue("viewport", out var vps) && vps.Length > 0)
 		{
 			var v = vps.Trim();

@@ -20,16 +20,26 @@ function ensureMasterGain() {
   masterGain.connect(audioCtx.destination);
 }
 
+function ensureRunningFlushHook(ctx) {
+  if (!ctx || ctx.__openraRunningFlush) return;
+  ctx.__openraRunningFlush = true;
+  ctx.addEventListener('statechange', () => {
+    if (ctx.state === 'running') flushAfterUnlock();
+  });
+}
+
 function attachContext(ctx) {
   if (!ctx || audioCtx === ctx) {
     if (ctx) {
       audioCtx = ctx;
+      ensureRunningFlushHook(ctx);
       ensureMasterGain();
       flushAfterUnlock();
     }
     return;
   }
   audioCtx = ctx;
+  ensureRunningFlushHook(ctx);
   ensureMasterGain();
   flushAfterUnlock();
 }
@@ -288,6 +298,11 @@ export function playVoice(bufferId, loop, volume) {
       paused: false
     });
     const ctx = audioCtx;
+    try {
+      const pr = ctx.resume();
+      if (pr !== undefined && typeof pr.then === 'function')
+        pr.then(() => flushAfterUnlock(), () => {});
+    } catch (_) { /* resume may throw outside a gesture */ }
     const once = () => {
       ctx.removeEventListener('statechange', once);
       if (ctx.state === 'running')

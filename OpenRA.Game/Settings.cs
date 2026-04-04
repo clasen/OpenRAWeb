@@ -191,7 +191,7 @@ namespace OpenRA
 		public int2 FullscreenSize = new(0, 0);
 
 		[Desc("Screen resolution in windowed mode.")]
-		public int2 WindowedSize = new(1024, 768);
+		public int2 WindowedSize = new(1280, 720);
 
 		public bool CursorDouble = false;
 		public WorldViewport ViewportDistance = WorldViewport.Medium;

@@ -5,11 +5,13 @@
   window.__openraAudioUnlockInstalled = true;
   window.__openraAudioCtx = window.__openraAudioCtx || null;
   function unlockOnce() {
-    if (window.__openraAudioCtx) return;
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    var ctx = new AC();
-    window.__openraAudioCtx = ctx;
+    var ctx = window.__openraAudioCtx;
+    if (!ctx || ctx.state === 'closed') {
+      ctx = new AC();
+      window.__openraAudioCtx = ctx;
+    }
     var done = function () {
       var cb = window.__openraOnAudioUnlocked;
       if (typeof cb === 'function') {
@@ -18,13 +20,14 @@
     };
     try {
       var p = ctx.resume();
-      if (p !== undefined && typeof p.then === 'function') p.then(done);
+      if (p !== undefined && typeof p.then === 'function') p.then(done, done);
       else done();
     } catch (e) {
       done();
     }
   }
   document.addEventListener('pointerdown', unlockOnce, { capture: true, passive: true });
+  document.addEventListener('touchstart', unlockOnce, { capture: true, passive: true });
   document.addEventListener('keydown', unlockOnce, { capture: true });
 })();
 
@@ -175,10 +178,25 @@ window.browserOpenRA = {
     window.addEventListener('keydown', onWindowKey, true);
     window.addEventListener('keyup', onWindowKey, true);
 
+    function syncCanvasSize() {
+      var dpr = window.devicePixelRatio || 1;
+      var cssW = c.clientWidth;
+      var cssH = c.clientHeight;
+      var w = Math.round(cssW * dpr);
+      var h = Math.round(cssH * dpr);
+      if (w < 320 || h < 240) return;
+      if (c.width !== w || c.height !== h) {
+        c.width = w;
+        c.height = h;
+        invoke('resize', w, h, cssW, cssH, 0, 0, 0, 0, null);
+      }
+    }
+    syncCanvasSize();
+    window.addEventListener('resize', function () { syncCanvasSize(); });
+
     var lastX = (c.width / 2) | 0;
     var lastY = (c.height / 2) | 0;
 
-    // Coalesce mousemove between game ticks: one WASM enqueue per frame max (reduces interop storms).
     var pendingMove = null;
     function flushPendingMove() {
       if (!pendingMove) return;

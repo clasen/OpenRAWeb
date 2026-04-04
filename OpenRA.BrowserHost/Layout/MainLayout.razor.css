@@ -1,8 +1,11 @@
 .browser-host-fullscreen {
     margin: 0;
     padding: 0;
-    width: 100vw;
+    width: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     background: #000;
 }

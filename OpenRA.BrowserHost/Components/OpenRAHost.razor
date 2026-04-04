@@ -13,7 +13,7 @@
 @inject NavigationManager NavigationManager
 @inject IWebAssemblyHostEnvironment HostEnvironment
 
-<div class="openra-host-shell" style="@ShellGpuCssVars">
+<div class="openra-host-shell">
     <canvas id="game-canvas" width="@_gpu.CanvasWidth" height="@_gpu.CanvasHeight" tabindex="0"
             class="openra-game-canvas"></canvas>
 
@@ -23,6 +23,7 @@
             <div class="openra-loading-card">
                 <div class="openra-loading-title">Initializing OpenRA</div>
                 <div class="openra-loading-subtitle">@loadingStatus</div>
+                <div class="openra-loading-audio-hint">Click or tap anywhere to enable sound.</div>
                 <div class="openra-loading-progress">
                     <div class="openra-loading-progress-indeterminate"></div>
                 </div>
@@ -36,22 +37,23 @@
         position: fixed;
         inset: 0;
         margin: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         background: #000;
+        overflow: hidden;
+        cursor: none;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
+    /* Canvas fills viewport exactly; JS syncs the bitmap (width/height attrs) to match so there is no crop and no letterbox. */
     .openra-game-canvas {
         cursor: none;
         outline: none;
         border: none;
         background: #000;
         display: block;
-        width: min(100vw, calc(100vh * var(--ora-cw) / var(--ora-ch)));
-        height: min(100vh, calc(100vw * var(--ora-ch) / var(--ora-cw)));
-        max-width: 100vw;
-        max-height: 100vh;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
     }
 
     .openra-loading-overlay {
@@ -84,7 +86,14 @@
     .openra-loading-subtitle {
         font-size: 0.9rem;
         color: #bfc9d8;
+        margin-bottom: 4px;
+    }
+
+    .openra-loading-audio-hint {
+        font-size: 0.75rem;
+        color: rgba(191, 201, 216, 0.78);
         margin-bottom: 8px;
+        line-height: 1.35;
     }
 
     .openra-loading-progress {
@@ -118,7 +127,7 @@
 
 	BrowserHostGpuOptions _gpu;
 
-	string ShellGpuCssVars => $"--ora-cw: {_gpu.CanvasWidth}; --ora-ch: {_gpu.CanvasHeight};";
+	string ShellGpuCssVars => "";
 
 	protected override void OnInitialized()
 	{
@@ -173,13 +182,26 @@
 			bootLastMs = t;
 		}
 
+		var viewportSize = await JS.InvokeAsync<int[]>("eval", new object[]
+		{
+			"[document.documentElement.clientWidth, document.documentElement.clientHeight, window.devicePixelRatio || 1]"
+		});
+		var vpCssW = viewportSize is { Length: >= 2 } && viewportSize[0] > 320 ? viewportSize[0] : _gpu.CanvasWidth;
+		var vpCssH = viewportSize is { Length: >= 2 } && viewportSize[1] > 240 ? viewportSize[1] : _gpu.CanvasHeight;
+
 		var argsList = new List<string>
 		{
 			"Engine.EngineDir=engine",
 			"Engine.SupportDir=support",
 			"Game.Mod=" + _gpu.BrowserGameMod
 		};
-		argsList.AddRange(_gpu.GraphicsLaunchArgs);
+		foreach (var arg in _gpu.GraphicsLaunchArgs)
+		{
+			if (arg.StartsWith("Graphics.WindowedSize=", StringComparison.Ordinal))
+				continue;
+			argsList.Add(arg);
+		}
+		argsList.Add($"Graphics.WindowedSize={vpCssW},{vpCssH}");
 		if (!string.IsNullOrEmpty(_gpu.BrowserTunnelJoinUrl))
 			argsList.Add("Browser.TunnelUrl=" + _gpu.BrowserTunnelJoinUrl);
 		if (!string.IsNullOrEmpty(_gpu.BrowserTunnelEdgeToken))

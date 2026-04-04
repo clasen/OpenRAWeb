@@ -18,10 +18,8 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 {
 	public class MultiplayerLogic : ChromeLogic
 	{
-#if OPENRA_BROWSER
 		[FluentReference]
 		const string BrowserTunnelJoinLabel = "button-multiplayer-browser-tunnel-join";
-#endif
 
 		static readonly Action DoNothing = () => { };
 
