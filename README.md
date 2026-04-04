@@ -2,7 +2,7 @@
 
 ## This fork: browser port (proof of concept)
 
-This repository is a **fork of OpenRA release 20250330** (branch `base-release-20250330`). The goal is a **browser port** of the engine and game as a **WebAssembly proof of concept**, toward a **“Red Alert roulette”**-style experience: open a link and play online. It is loosely inspired by in-browser games such as Quake III on [pieter.com](https://pieter.com).
+This repository is a **fork of OpenRA release 20250330** (branch `base-release-20250330`). The goal is a **browser port** of the engine and game as a **WebAssembly proof of concept**, toward a **“Red Alert roulette”**-style experience: open a link and play online. It is loosely inspired by in-browser games such as Quake III on [q3.pieter.com](https://q3.pieter.com).
 
 The prototype was built in about **two days**, mostly by “vibecoding” with **Cursor in auto mode**. It is **not** a finished product—expect rough edges.
 
